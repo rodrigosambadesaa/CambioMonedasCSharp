@@ -29,6 +29,20 @@ dotnet run --project ProgVorazCs.Console --configuration Release
 dotnet run --project ProgVorazCs.Gui --configuration Release
 ```
 
+## CI y Release en GitHub Actions
+
+- `CI CSharp` (`.github/workflows/ci.yml`): build y smoke tests de consola en Linux/macOS/Windows, mas smoke launch de GUI en Windows.
+- `Release CSharp` (`.github/workflows/release.yml`): se dispara al hacer push de tags `v*`, publica artefactos `.zip` para:
+	- Consola: `win-x64`, `linux-x64`, `osx-x64`
+	- GUI: `win-x64`
+
+Para disparar release:
+
+```bash
+git tag -a v0.5.0-cs -m "Release v0.5.0-cs"
+git push origin main --follow-tags
+```
+
 ## Tags iniciales
 
 Este repositorio incluye tags equivalentes de migracion en C#:
@@ -38,3 +52,5 @@ Este repositorio incluye tags equivalentes de migracion en C#:
 - `v0.3.0-cs`
 - `v0.3.1-cs`
 - `v0.4.0-cs`
+- `v0.5.0-cs-rc1`
+- `v0.5.0-cs`

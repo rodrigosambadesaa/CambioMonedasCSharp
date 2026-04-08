@@ -1,0 +1,94 @@
+name: Release CSharp
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-artifacts:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            project: ProgVorazCs.Console/ProgVorazCs.Console.csproj
+            artifactName: console-win-x64
+            outputDir: out/console-win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+            project: ProgVorazCs.Console/ProgVorazCs.Console.csproj
+            artifactName: console-linux-x64
+            outputDir: out/console-linux-x64
+          - os: macos-latest
+            rid: osx-x64
+            project: ProgVorazCs.Console/ProgVorazCs.Console.csproj
+            artifactName: console-osx-x64
+            outputDir: out/console-osx-x64
+          - os: windows-latest
+            rid: win-x64
+            project: ProgVorazCs.Gui/ProgVorazCs.Gui.csproj
+            artifactName: gui-win-x64
+            outputDir: out/gui-win-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish
+        run: >-
+          dotnet publish ${{ matrix.project }}
+          --configuration Release
+          --runtime ${{ matrix.rid }}
+          --self-contained false
+          -p:PublishSingleFile=false
+          -o ${{ matrix.outputDir }}
+
+      - name: Package artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path out/packages -Force | Out-Null
+          Compress-Archive -Path "${{ matrix.outputDir }}/*" -DestinationPath "out/packages/${{ matrix.artifactName }}.zip" -Force
+
+      - name: Package artifact (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p out/packages
+          cd "${{ matrix.outputDir }}"
+          zip -r "../../packages/${{ matrix.artifactName }}.zip" .
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifactName }}
+          path: out/packages/${{ matrix.artifactName }}.zip
+
+  release:
+    needs: build-artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/*.zip
