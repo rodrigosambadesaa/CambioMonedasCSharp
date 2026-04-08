@@ -1,0 +1,104 @@
+name: CI CSharp
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build solution
+        run: dotnet build ProgVorazCSharp.slnx --configuration Release
+
+      - name: Smoke consola modo a (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          printf "a\neuro\n0\nsalir\n" | dotnet run --project ProgVorazCs.Console --configuration Release --no-build
+
+      - name: Smoke consola modo b (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cp stock.txt stock.bak
+          printf "b\ndolar\n100\n0\nsalir\n" | dotnet run --project ProgVorazCs.Console --configuration Release --no-build
+          mv stock.bak stock.txt
+
+      - name: Smoke consola modo c (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cp stock.txt stock.bak
+          printf "c\neuro\nanadir\n1\n1\nquitar\n1\n1\nvolver\nsalir\n" | dotnet run --project ProgVorazCs.Console --configuration Release --no-build
+          mv stock.bak stock.txt
+
+      - name: Smoke consola modo a (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          @"
+          a
+          euro
+          0
+          salir
+          "@ | dotnet run --project ProgVorazCs.Console --configuration Release --no-build | Out-String
+
+      - name: Smoke consola modo b (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item stock.txt stock.bak -Force
+          @"
+          b
+          dolar
+          100
+          0
+          salir
+          "@ | dotnet run --project ProgVorazCs.Console --configuration Release --no-build | Out-String
+          Move-Item stock.bak stock.txt -Force
+
+      - name: Smoke consola modo c (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Copy-Item stock.txt stock.bak -Force
+          @"
+          c
+          euro
+          anadir
+          1
+          1
+          quitar
+          1
+          1
+          volver
+          salir
+          "@ | dotnet run --project ProgVorazCs.Console --configuration Release --no-build | Out-String
+          Move-Item stock.bak stock.txt -Force
+
+      - name: Smoke launch GUI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem .\ProgVorazCs.Gui\bin\Release\net10.0-windows\ -Filter ProgVorazCs.Gui.exe | Select-Object -First 1
+          if (-not $exe) { throw "No se encontro ejecutable GUI." }
+          $proc = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 3
+          if ($proc.HasExited -and $proc.ExitCode -ne 0) {
+            throw "La GUI termino prematuramente con codigo $($proc.ExitCode)."
+          }
+          if (-not $proc.HasExited) {
+            Stop-Process -Id $proc.Id
+          }

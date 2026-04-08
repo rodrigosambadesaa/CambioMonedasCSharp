@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ProgVorazCs.Console/ProgVorazCs.Console.csproj" />
+  <Project Path="ProgVorazCs.Core/ProgVorazCs.Core.csproj" />
+  <Project Path="ProgVorazCs.Gui/ProgVorazCs.Gui.csproj" />
+</Solution>
