@@ -22,8 +22,15 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Build solution
+      - name: Build solution (Windows)
+        if: runner.os == 'Windows'
         run: dotnet build ProgVorazCSharp.slnx --configuration Release
+
+      - name: Build core + console (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          dotnet build ProgVorazCs.Core/ProgVorazCs.Core.csproj --configuration Release
+          dotnet build ProgVorazCs.Console/ProgVorazCs.Console.csproj --configuration Release
 
       - name: Smoke consola modo a (Linux/macOS)
         if: runner.os != 'Windows'
