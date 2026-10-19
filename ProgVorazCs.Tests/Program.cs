@@ -49,7 +49,7 @@ try
     Check(service.Repository.LoadStock("dolar")!.SequenceEqual([BigInteger.One, new BigInteger(2)]),
           "no corromper stock de otra moneda");
     // Dos operaciones simultaneas no deben perder actualizaciones.
-    Task<bool>[] concurrent = Enumerable.Range(0, 12).Select(_ =>
+    Task<bool>[] concurrent = Enumerable.Range(0, 12).Select(i =>
         Task.Run(() => service.Repository.TryAdjustStock("euro", 0, BigInteger.One, true, out _))).ToArray();
     Check((await Task.WhenAll(concurrent)).All(x => x), "incrementos concurrentes");
     Check(service.Repository.LoadStock("euro")![0] == 16, "sin lost updates");
