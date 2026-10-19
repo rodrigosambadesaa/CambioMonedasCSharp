@@ -106,6 +106,14 @@ Match(0, [4,3,1], null, 0, null, true, 0);
 Match(BigInteger.Parse("99999999999999999999999999999999999"), [5,1], null, 0, null, true);
 var nearest = EnhancedChangeEngine.Compute(11, [new BigInteger(6), new BigInteger(4)], nearest: true);
 Check(nearest?.Covered == 10, "importe cercano incorrecto");
+var unreachableNear = EnhancedChangeEngine.Compute(150_000,
+    [new BigInteger(200_001)], nearest: true);
+Check(unreachableNear is null, "cercano sin cambio no nulo");
+var nearLarge = EnhancedChangeEngine.Compute(150_001,
+    [new BigInteger(50_000)], nearest: true);
+Check(nearLarge?.Covered == 150_000 && nearLarge.TotalCoins == 3,
+    "cercano alto calculado con una tabla DP");
+
 
 string temp = Path.Combine(Path.GetTempPath(), "progvoraz-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(temp);
