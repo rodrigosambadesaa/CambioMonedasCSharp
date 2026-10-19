@@ -80,38 +80,26 @@ public sealed class CurrencyRepository
 
     public bool UpdateStock(string currencyName, IReadOnlyList<BigInteger> stock)
     {
-        if (!File.Exists(stockPath) || stock.Count == 0)
-        {
-            return false;
-        }
+        int count = LoadDenominations(currencyName)?.Count ?? 0;
+        return StockLedger.Replace(stockPath, currencyName, count, stock);
+    }
 
-        List<string> lines = File.ReadAllLines(stockPath).ToList();
-        string target = TextKey.Normalize(currencyName);
+    /// <summary>
+    /// Descontar piezas de la última versión persistida sin permitir saldos negativos.
+    /// Todos los procesos C# cooperantes utilizan el mismo bloqueo.
+    /// </summary>
+    public bool TryConsumeStock(string currencyName, IReadOnlyList<BigInteger> consumed,
+        out List<BigInteger> updated)
+    {
+        int count = LoadDenominations(currencyName)?.Count ?? 0;
+        return StockLedger.Consume(stockPath, currencyName, count, consumed, out updated);
+    }
 
-        for (int i = 0; i < lines.Count; i++)
-        {
-            string lineKey = TextKey.Normalize(lines[i]);
-            if (!string.Equals(lineKey, target, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (i + stock.Count >= lines.Count + 1)
-            {
-                return false;
-            }
-
-            for (int j = 0; j < stock.Count; j++)
-            {
-                BigInteger value = stock[j];
-                lines[i + 1 + j] = value.IsZero ? "-1" : value.ToString(CultureInfo.InvariantCulture);
-            }
-
-            File.WriteAllLines(stockPath, lines);
-            return true;
-        }
-
-        return false;
+    public bool TryAdjustStock(string currencyName, int index, BigInteger delta, bool add,
+        out List<BigInteger> updated)
+    {
+        int count = LoadDenominations(currencyName)?.Count ?? 0;
+        return StockLedger.Adjust(stockPath, currencyName, count, index, delta, add, out updated);
     }
 
     public CurrencyData? LoadCurrency(string currencyName)

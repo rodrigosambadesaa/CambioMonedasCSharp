@@ -44,6 +44,25 @@ try
     Check(ExchangeRates.LoadStub("USD", "EUR", temp) == 0.917m, "stub USD EUR");
     var service = new PortableServices(temp);
     Check(service.Validate("EUR"), "validacion EUR");
+    // Validacion de fronteras de bloque: no sobrescribir otra divisa.
+    Check(!service.Repository.UpdateStock("euro", [0,0,0,0]), "bloque con longitud incorrecta rechazado");
+    Check(service.Repository.LoadStock("dolar")!.SequenceEqual([BigInteger.One, new BigInteger(2)]),
+          "no corromper stock de otra moneda");
+    // Dos operaciones simultaneas no deben perder actualizaciones.
+    Task<bool>[] concurrent = Enumerable.Range(0, 12).Select(_ =>
+        Task.Run(() => service.Repository.TryAdjustStock("euro", 0, BigInteger.One, true, out _))).ToArray();
+    Check((await Task.WhenAll(concurrent)).All(x => x), "incrementos concurrentes");
+    Check(service.Repository.LoadStock("euro")![0] == 16, "sin lost updates");
+    Check(!service.Repository.TryConsumeStock("euro", [17,0,0], out _), "sin stock negativo");
+    Check(service.Repository.TryConsumeStock("euro", [12,0,0], out var balance),
+          "consumo atomico");
+    Check(balance[0] == 4, "descuento exacto");
+    Check(service.Repository.TryAdjustStock("euro", 1, BigInteger.One, false, out balance),
+          "administrador quita");
+    Check(balance[1] == 1, "resultado de administrador");
+    Check(service.Repository.TryAdjustStock("euro", 1, BigInteger.One, true, out balance),
+          "administrador añade");
+    Check(balance[1] == 2, "restauracion de delta");
     service.Snapshot(Path.Combine(temp, "backup.txt"));
     var data = service.Repository.LoadCurrency("euro")!;
     Check(data.Stock.SequenceEqual([new BigInteger(4), new BigInteger(2), BigInteger.Zero]), "stock -1");

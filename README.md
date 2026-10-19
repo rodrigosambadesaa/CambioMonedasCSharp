@@ -85,3 +85,15 @@ PROGVORAZ_EXCHANGE_SOURCE=stub dotnet run --project ProgVorazCs.Console -- --con
 Una tasa de ejemplo del stub no representa una cotización real ni actual.
 Si falta una tasa y falla la API, se retorna error, sin utilizar tasas
 inventadas. Se redondea a céntimos con precisión decimal.
+
+
+## Integridad del inventario (concurrencia)
+
+El módulo \`StockLedger\` reimplementa la escritura de \`stock.txt\` con
+fichero de preparación y reemplazo, bloqueo de archivo entre procesos .NET y
+validación estricta de los límites de cada moneda. La consola utiliza operaciones
+read-modify-write bajo bloqueo para descontar piezas y modificar stock de forma
+atómica. Si otra instancia consume las piezas antes, se informa al usuario en
+lugar de persistir un stock negativo. Las pruebas de regresión incluyen operaciones
+concurrentes, saldo insuficiente y protección entre bloques. Los procesos ajenos
+al módulo, como el programa original en C, **no comparten el bloqueo**.

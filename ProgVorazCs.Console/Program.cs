@@ -111,11 +111,17 @@ internal static class Program
 
             if (limited)
             {
-                ok = ChangeCalculator.ComputeLimited(amount, currency.Denominations, currency.Stock, out solution, out List<BigInteger> updatedStock);
+                ok = ChangeCalculator.ComputeLimited(amount, currency.Denominations, currency.Stock,
+                    out solution, out _);
                 if (ok)
                 {
+                    if (!repo.TryConsumeStock(currencyKey, solution, out List<BigInteger> updatedStock))
+                    {
+                        Console.WriteLine("El stock ha cambiado o no se pudo guardar. Reintentelo.");
+                        currency.Stock = repo.LoadStock(currencyKey) ?? currency.Stock;
+                        continue;
+                    }
                     currency.Stock = updatedStock;
-                    _ = repo.UpdateStock(currencyKey, updatedStock);
                 }
             }
             else
@@ -200,8 +206,16 @@ internal static class Program
                 continue;
             }
 
-            currency.Stock[index] = add ? currency.Stock[index] + delta : currency.Stock[index] - delta;
-            Console.WriteLine(repo.UpdateStock(currencyKey, currency.Stock) ? "Stock actualizado correctamente." : "No se pudo actualizar stock.txt.");
+            if (repo.TryAdjustStock(currencyKey, index, delta, add, out List<BigInteger> freshStock))
+            {
+                currency.Stock = freshStock;
+                Console.WriteLine("Stock actualizado correctamente.");
+            }
+            else
+            {
+                currency.Stock = repo.LoadStock(currencyKey) ?? currency.Stock;
+                Console.WriteLine("No se pudo actualizar el inventario. Vuelva a intentarlo.");
+            }
         }
     }
 
