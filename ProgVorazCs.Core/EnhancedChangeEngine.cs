@@ -43,14 +43,9 @@ public static class EnhancedChangeEngine
 
         if (minCoins == 0 && maxCoins is null)
         {
-            Answer? normal = DynamicOptimal(target, values, stock);
-            if (normal is not null || !nearest) return normal;
-            for (int t = target - 1; t > 0; --t)
-            {
-                Answer? candidate = DynamicOptimal(t, values, stock);
-                if (candidate is not null) return candidate;
-            }
-            return null;
+            // Una única tabla DP cubre todos los importes hasta target.
+            // La implementación anterior reconstruía la DP por importe.
+            return DynamicOptimal(target, values, stock, nearest);
         }
 
         int ceiling = Math.Min(maxCoins ?? target, target);
@@ -100,7 +95,7 @@ public static class EnhancedChangeEngine
         return null;
     }
 
-    private static Answer? DynamicOptimal(int target, int[] values, IReadOnlyList<BigInteger>? stock)
+    private static Answer? DynamicOptimal(int target, int[] values, IReadOnlyList<BigInteger>? stock, bool nearest)
     {
         const int inf = int.MaxValue / 4;
         int[] minimum = Enumerable.Repeat(inf, target + 1).ToArray();
@@ -137,7 +132,11 @@ public static class EnhancedChangeEngine
                 }
             }
         }
-        return minimum[target] == inf ? null : new Answer(target, Extract(plans[target], values.Length));
+        int covered = target;
+        if (nearest)
+            while (covered > 0 && minimum[covered] == inf) --covered;
+        if (minimum[covered] == inf || nearest && covered == 0) return null;
+        return new Answer(covered, Extract(plans[covered], values.Length));
     }
 
     private static Answer? GreedyLarge(BigInteger amount, IReadOnlyList<BigInteger> denominations,

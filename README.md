@@ -107,3 +107,7 @@ Hay 480 escenarios deterministas con distintos stocks, cantidades, límites
 de piezas y cambio cercano, además de las pruebas de persistencia, HTTP,
 concurrencia e integridad previamente existentes. No se usa el propio motor
 para calcular los resultados esperados.
+
+### Optimización del cambio cercano
+
+Para importes compatibles con programación dinámica, se utiliza **una sola tabla DP** para buscar la mayor cantidad alcanzable. Se elimina la reconstrucción repetida de la tabla para cada céntimo inferior, evitando el peor caso cuadrático anterior. Las pruebas incluyen un importe elevado sin ninguna moneda alcanzable.
