@@ -79,8 +79,8 @@ public partial class Form1 : Form
         btnAdd.Click += (_, _) => ApplyStockChange(add: true);
         btnRemove.Click += (_, _) => ApplyStockChange(add: false);
         btnCalculate.Click += (_, _) => CalculateChange();
-        rbLimited.CheckedChanged += (_, _) => RefreshStockView();
-        rbUnlimited.CheckedChanged += (_, _) => RefreshStockView();
+        rbLimited.CheckedChanged += (_, _) => { lstResult.Items.Clear(); RefreshStockView(); };
+        rbUnlimited.CheckedChanged += (_, _) => { lstResult.Items.Clear(); RefreshStockView(); };
     }
 
     private bool IsLimitedMode => rbLimited.Checked;
@@ -115,6 +115,7 @@ public partial class Form1 : Form
             return;
         }
 
+        lstResult.Items.Clear();
         RefreshStockView();
     }
 
@@ -122,7 +123,6 @@ public partial class Form1 : Form
     {
         lstStock.Items.Clear();
         cmbDenomination.Items.Clear();
-        lstResult.Items.Clear();
 
         if (current is null)
         {
@@ -175,19 +175,19 @@ public partial class Form1 : Form
         }
 
         int idx = cmbDenomination.SelectedIndex;
-        if (!add && current.Stock[idx] < delta)
+        // El valor mostrado puede ser antiguo. Comprobar y modificar la
+        // versión actual del inventario dentro de una sola transacción.
+        if (!repo.TryAdjustStock(currentKey, idx, delta, add,
+            out List<BigInteger> persistedStock))
         {
-            MessageBox.Show("No puedes quitar mas stock del disponible.", "Administrador", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            current.Stock = repo.LoadStock(currentKey) ?? current.Stock;
+            RefreshStockView();
+            MessageBox.Show("Inventario modificado por otro proceso, insuficiente o no guardado. Revise el stock y reintente.",
+                "Administrador", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        current.Stock[idx] = add ? current.Stock[idx] + delta : current.Stock[idx] - delta;
-        if (!repo.UpdateStock(currentKey, current.Stock))
-        {
-            MessageBox.Show("No se pudo persistir stock.txt.", "Administrador", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-
+        current.Stock = persistedStock;
         txtDelta.Clear();
         RefreshStockView();
     }
@@ -212,11 +212,22 @@ public partial class Form1 : Form
 
         if (IsLimitedMode)
         {
-            ok = ChangeCalculator.ComputeLimited(amount, current.Denominations, current.Stock, out solution, out List<BigInteger> updatedStock);
+            ok = ChangeCalculator.ComputeLimited(amount, current.Denominations, current.Stock,
+                out solution, out _);
             if (ok)
             {
-                current.Stock = updatedStock;
-                _ = repo.UpdateStock(currentKey, current.Stock);
+                // No mostrar una devolución como realizada si la persistencia
+                // falla o si otra instancia ha agotado el inventario.
+                if (!repo.TryConsumeStock(currentKey, solution, out List<BigInteger> persistedStock))
+                {
+                    current.Stock = repo.LoadStock(currentKey) ?? current.Stock;
+                    lstResult.Items.Add("Operación rechazada: stock modificado o error al guardar.");
+                    RefreshStockView();
+                    MessageBox.Show("No se ha descontado ninguna moneda. Recargue el inventario y reintente.",
+                        "Cambio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                current.Stock = persistedStock;
             }
         }
         else
