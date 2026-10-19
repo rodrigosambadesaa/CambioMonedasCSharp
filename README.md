@@ -111,3 +111,7 @@ para calcular los resultados esperados.
 ### Optimización del cambio cercano
 
 Para importes compatibles con programación dinámica, se utiliza **una sola tabla DP** para buscar la mayor cantidad alcanzable. Se elimina la reconstrucción repetida de la tabla para cada céntimo inferior, evitando el peor caso cuadrático anterior. Las pruebas incluyen un importe elevado sin ninguna moneda alcanzable.
+
+### Corrección del formulario WinForms
+
+La interfaz gráfica comparte ahora las operaciones transaccionales del motor en vez de sobrescribir `stock.txt` a partir de un estado en memoria potencialmente obsoleto. Los cambios de administrador y las devoluciones limitadas notifican los errores de persistencia y recargan el inventario. La lista del resultado ya no se borra automáticamente al actualizar el panel de stock.
