@@ -146,3 +146,12 @@ realizada por este backend C#. La ausencia de historial no se considera un error
 La escritura del historial es un registro informativo posterior al commit y no
 constituye una transacción conjunta con \`stock.txt\`; si falla el disco para el
 log, la operación de stock ya confirmada se mantiene.
+
+
+## Restauración segura con inventario concurrente
+
+\`Restore\` utiliza ahora el mismo fichero de bloqueo que las operaciones
+de recepción, consumo y ajuste. Copia el snapshot a un archivo de preparación,
+valida todas las divisas y efectúa la sustitución de \`stock.txt\` antes de liberar
+el bloqueo. Un snapshot incompleto se rechaza preservando el inventario.
+El bloqueo solo coordina aplicaciones C# que empleen \`StockLedger\`.

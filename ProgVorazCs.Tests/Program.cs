@@ -195,6 +195,18 @@ try
     Check(service.Repository.UpdateStock("euro", [0, 0, 0]), "actualizar stock");
     service.Restore(Path.Combine(temp, "backup.txt"));
     Check(service.Repository.LoadStock("euro")![0] == 4, "restaurar stock");
+    string damaged = Path.Combine(temp, "corrupt-backup.txt");
+    File.WriteAllText(damaged, "euro\n1\n2\ndolar\n0\n0\n");
+    try
+    {
+        service.Restore(damaged);
+        throw new Exception("Restauracion corrupta aceptada");
+    }
+    catch (InvalidDataException) { }
+    Check(service.Repository.LoadStock("euro")![0] == 4 &&
+        service.Repository.LoadStock("dolar")![0] == 1,
+        "restauracion invalida no modifica ninguna divisa");
+
 
     // HTTP local parity: health, stock JSON, batch CSV, 404 y request demasiado grande.
     var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
