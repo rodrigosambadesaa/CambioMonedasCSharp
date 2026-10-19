@@ -48,6 +48,14 @@ public static class EnhancedChangeEngine
             return DynamicOptimal(target, values, stock, nearest);
         }
 
+        // Fast path: when the global optimum already falls within the required
+        // interval, no (amount, coin-count) state-space search is needed.
+        // Critical for large amounts and generous ranges such as 1-100 pieces.
+        Answer? optimum = DynamicOptimal(target, values, stock, false);
+        if (optimum is not null && optimum.TotalCoins >= minCoins
+            && (maxCoins is null || optimum.TotalCoins <= maxCoins.Value))
+            return optimum;
+
         int ceiling = Math.Min(maxCoins ?? target, target);
         if (ceiling < minCoins) return null;
         if (target > 20_000 || ceiling > 300)
