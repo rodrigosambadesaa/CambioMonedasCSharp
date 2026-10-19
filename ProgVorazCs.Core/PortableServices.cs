@@ -112,27 +112,35 @@ public sealed class PortableServices
 
     public void Restore(string source)
     {
-        // No se restaura desde archivos malformados. No se sobrescribe el
-        // original hasta completar la validacion y la copia en staging.
         string sourceFull = Path.GetFullPath(source);
         string target = Path.Combine(root, "stock.txt");
-        if (!File.Exists(sourceFull)) throw new FileNotFoundException("Snapshot no encontrado.", source);
-        string staging = Path.Combine(root, ".stock-restore-" + Guid.NewGuid().ToString("N"));
-        File.Copy(sourceFull, staging);
-        try
+        if (!File.Exists(sourceFull))
+            throw new FileNotFoundException("Snapshot no encontrado.", source);
+
+        // Sincronizar con las transacciones del mismo proceso o de otras
+        // instancias C# que utilizan stock.txt.lock.
+        StockLedger.WithExclusiveLock(target, () =>
         {
-            // Verificar por bloques con los datos originales antes de cambiar el destino.
-            foreach (string name in repository.LoadCurrencyNames())
+            string staging = Path.Combine(root, ".stock-restore-" + Guid.NewGuid().ToString("N"));
+            try
             {
-                List<BigInteger>? candidate = ReadNumbers(staging, name, true);
-                List<BigInteger>? denoms = repository.LoadDenominations(name);
-                if (candidate is null || denoms is null || candidate.Count != denoms.Count
-                    || candidate.Any(x => x < 0))
-                    throw new InvalidDataException("Snapshot inconsistente para " + name);
+                File.Copy(sourceFull, staging);
+                foreach (string name in repository.LoadCurrencyNames())
+                {
+                    List<BigInteger>? candidate = ReadNumbers(staging, name, true);
+                    List<BigInteger>? denominations = repository.LoadDenominations(name);
+                    if (candidate is null || denominations is null ||
+                        candidate.Count != denominations.Count || candidate.Any(x => x < 0))
+                        throw new InvalidDataException("Snapshot inconsistente para " + name);
+                }
+                // El cambio de nombre ocurre antes de soltar el bloqueo.
+                File.Move(staging, target, true);
             }
-            File.Move(staging, target, true);
-        }
-        finally { if (File.Exists(staging)) File.Delete(staging); }
+            finally
+            {
+                if (File.Exists(staging)) File.Delete(staging);
+            }
+        });
     }
 
     private static List<BigInteger>? ReadNumbers(string path, string key, bool normalizeMinusOne)

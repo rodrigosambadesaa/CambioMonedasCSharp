@@ -29,6 +29,17 @@ internal static class StockLedger
         throw new IOException("No se pudo adquirir el bloqueo de inventario.");
     }
 
+    /// <summary>
+    /// Execute a complete snapshot replacement under the SAME lock as
+    /// consume, exchange, adjust and absolute stock writes.
+    /// </summary>
+    internal static void WithExclusiveLock(string stockPath, Action operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        using FileStream held = Acquire(stockPath);
+        operation();
+    }
+
     public static bool Replace(string path, string name, int expected,
         IReadOnlyList<BigInteger> values)
     {
