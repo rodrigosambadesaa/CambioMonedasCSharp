@@ -208,7 +208,9 @@ public static class ChangeCalculator
 {
     public static bool ComputeUnlimited(BigInteger amount, IReadOnlyList<BigInteger> denominations, out List<BigInteger> result)
     {
-        return ComputeOptimal(amount, denominations, null, 0, null, out result, out _);
+        var answer = EnhancedChangeEngine.Compute(amount, denominations);
+        result = answer?.Counts.ToList() ?? [];
+        return answer is not null;
     }
 
     public static bool ComputeLimited(
@@ -218,7 +220,10 @@ public static class ChangeCalculator
         out List<BigInteger> result,
         out List<BigInteger> updatedStock)
     {
-        return ComputeOptimal(amount, denominations, stock, 0, null, out result, out updatedStock);
+        var answer = EnhancedChangeEngine.Compute(amount, denominations, stock);
+        result = answer?.Counts.ToList() ?? [];
+        updatedStock = answer is null ? stock.ToList() : stock.Zip(answer.Counts, (a,b) => a-b).ToList();
+        return answer is not null;
     }
 
     private static bool ComputeOptimal(BigInteger amount, IReadOnlyList<BigInteger> denominations,
