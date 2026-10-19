@@ -48,7 +48,7 @@ try
     using StringWriter output = new();
     service.RunBatch(input, output);
     string csv = output.ToString();
-    Check(csv.Contains("OK total=2") && csv.Contains("OK total=4") && csv.Contains("OK total=4") == false,
+    Check(csv.Split("OK total=2").Length - 1 == 2 && csv.Contains(",NO,"),
         "resultado de batch");
     service.ExportJson(Path.Combine(temp, "stock.json"));
     Check(File.ReadAllText(Path.Combine(temp, "stock.json")).Contains("\"nombre\": \"euro\""), "export JSON");
