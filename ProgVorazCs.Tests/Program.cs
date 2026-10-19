@@ -96,6 +96,8 @@ static void ExhaustiveDifferential()
 
 ExhaustiveDifferential();
 Match(6, [4,3,1], null, 0, null, true, 2);
+Match(12345, [10000,5000,2000,1000,500,200,100,50,25,10,5,1],
+      null, 1, 100, true, 7); // Regresión contra el programa C original.
 Match(6, [4,3,1], [1,2,1], 0, null, true, 2);
 Match(8, [5,3,1], [1,0,2], 0, null, false);
 Match(6, [4,3,1], null, 3, 3, true, 3);
