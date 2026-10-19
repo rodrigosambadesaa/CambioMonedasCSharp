@@ -58,6 +58,22 @@ public static class LocalHttpServer
                     return;
                 }
                 if (length > MaxRequestBytes) {
+                    // Permite vaciar cuerpos marginalmente mayores para que el cliente
+                    // pueda recibir 413 sin un TCP RST por escritura interrumpida.
+                    // Se mantiene un limite estricto de memoria y de lectura.
+                    if (length <= MaxRequestBytes + 8192)
+                    {
+                        byte[] discarded = new byte[8192];
+                        long pending = length;
+                        while (pending > 0)
+                        {
+                            int n = await context.Request.InputStream.ReadAsync(
+                                discarded.AsMemory(0, (int)Math.Min(discarded.Length, pending)), cancel);
+                            if (n == 0) break;
+                            pending -= n;
+                        }
+                    }
+                    context.Response.KeepAlive = false;
                     await SendAsync(context.Response, 413, "text/plain", "Payload Too Large", cancel);
                     return;
                 }
