@@ -172,6 +172,13 @@ try
         [1,0,0], [0,0,5], out var resetExchange), "inversa atomica");
     Check(resetExchange.SequenceEqual([new BigInteger(4),new BigInteger(2),BigInteger.Zero]),
         "restaura inventario para el resto de pruebas");
+    Check(service.History(10).Count > 0, "historial registra operaciones de stock");
+    Check(service.History(10).All(s => s.Contains("Moneda=euro")),
+        "historial escrito tras commits");
+    Check(service.CurrencySummary("EUR").Contains("Piezas=6"),
+        "resumen exacto stock con 4+2+0 piezas");
+    Check(service.CurrencySummary("EUR").Contains("ValorCentimos=26"),
+        "resumen exacto valor stock");
     service.Snapshot(Path.Combine(temp, "backup.txt"));
     var data = service.Repository.LoadCurrency("euro")!;
     Check(data.Stock.SequenceEqual([new BigInteger(4), new BigInteger(2), BigInteger.Zero]), "stock -1");

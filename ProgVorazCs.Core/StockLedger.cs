@@ -126,6 +126,18 @@ internal static class StockLedger
             File.Replace(staging, path, null);
             staging = null;
             final = newValues.ToList();
+            // Igual que el C original: el historial es informativo y su fallo
+            // no deshace una transacción de stock ya consolidada.
+            try
+            {
+                string line = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss",
+                    CultureInfo.InvariantCulture) + "] Stock actualizado | Moneda=" +
+                    currency.Replace('\n', '_').Replace('\r', '_') + Environment.NewLine;
+                File.AppendAllText(Path.Combine(Path.GetDirectoryName(path)!, "historial.txt"),
+                    line, new UTF8Encoding(false));
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or

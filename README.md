@@ -135,3 +135,14 @@ dotnet run --project ProgVorazCs.Console -- --specific euro 0,0,5 1,0,0 --specif
 
 La operación con stock modifica \`stock.txt\`; use un inventario de prueba
 para este ejemplo. Esta API no ejecuta ni enlaza código C.
+
+
+## Historial y resumen de inventario
+
+La consola incluye \`--history [--tail 100]\` (hasta 1000 entradas) y
+\`--summary EUR\`. El historial usa \`historial.txt\`, el formato de marcas de
+tiempo del original en C, y registra cada persistencia correcta de inventario
+realizada por este backend C#. La ausencia de historial no se considera un error.
+La escritura del historial es un registro informativo posterior al commit y no
+constituye una transacción conjunta con \`stock.txt\`; si falla el disco para el
+log, la operación de stock ya confirmada se mantiene.
