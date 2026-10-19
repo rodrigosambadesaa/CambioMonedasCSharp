@@ -102,6 +102,15 @@ public sealed class CurrencyRepository
         return StockLedger.Adjust(stockPath, currencyName, count, index, delta, add, out updated);
     }
 
+    public bool TryExchangeStock(string currencyName,
+        IReadOnlyList<BigInteger> received, IReadOnlyList<BigInteger> returned,
+        out List<BigInteger> updated)
+    {
+        int count = LoadDenominations(currencyName)?.Count ?? 0;
+        return StockLedger.Exchange(stockPath, currencyName, count, received, returned,
+            out updated);
+    }
+
     public CurrencyData? LoadCurrency(string currencyName)
     {
         List<BigInteger>? denominations = LoadDenominations(currencyName);

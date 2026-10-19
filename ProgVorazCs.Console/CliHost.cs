@@ -26,6 +26,7 @@ public static class CliHost
                 System.Console.WriteLine("ProgVoraz C# --input CSV [--output CSV] [--log LOG] | --stream | --docker");
                 System.Console.WriteLine("--lang es|en --json --export-stock-json FILE --export-report FILE");
                 System.Console.WriteLine("--snapshot-stock FILE --restore-stock FILE --convert FROM TO CENTS [--convert-stock]");
+                System.Console.WriteLine("--specific CURRENCY RECEIVED_CSV RETURNED_CSV [--specific-stock]");
                 System.Console.WriteLine("--server [--port N] (solo 127.0.0.1) --version --help");
                 return 0;
             }
@@ -64,6 +65,30 @@ public static class CliHost
                 writer?.Flush();
                 return 0;
             }
+            int specificIndex = Array.IndexOf(args, "--specific");
+            if (specificIndex >= 0)
+            {
+                if (specificIndex + 3 >= args.Length)
+                    throw new ArgumentException("Se requiere moneda y dos listas de cantidades.");
+                string key = PortableServices.MapCurrency(args[specificIndex + 1]);
+                CurrencyData currency = services.Repository.LoadCurrency(key)
+                    ?? throw new ArgumentException("Moneda desconocida: " + key);
+                BigInteger[] received = ParseCounts(args[specificIndex + 2],
+                    currency.Denominations.Count);
+                BigInteger[] returned = ParseCounts(args[specificIndex + 3],
+                    currency.Denominations.Count);
+                var result = SpecificExchange.Execute(services.Repository, key,
+                    received, returned, args.Contains("--specific-stock"));
+                if (result is null)
+                    throw new InvalidOperationException("Importes distintos, stock insuficiente o error de persistencia.");
+                System.Console.WriteLine("OK moneda=" + key + " total_centimos=" + result.TotalCents);
+                for (int i = 0; i < currency.Denominations.Count; i++)
+                    System.Console.WriteLine(currency.Denominations[i] +
+                        " recibido=" + received[i] + " entregado=" + returned[i]
+                        + " stock=" + result.CurrentStock[i]);
+                return 0;
+            }
+
             int conversion = Array.IndexOf(args, "--convert");
             if (conversion >= 0)
             {
@@ -93,6 +118,19 @@ public static class CliHost
             System.Console.Error.WriteLine(error.Message);
             return 2;
         }
+    }
+
+    private static BigInteger[] ParseCounts(string input, int required)
+    {
+        string[] tokens = input.Split(',');
+        if (tokens.Length != required)
+            throw new ArgumentException("Numero incorrecto de cantidades. Se requieren " + required);
+        var result = new BigInteger[required];
+        for (int i = 0; i < tokens.Length; i++)
+            if (!BigInteger.TryParse(tokens[i], NumberStyles.None,
+                    CultureInfo.InvariantCulture, out result[i]) || result[i] < 0)
+                throw new ArgumentException("Cantidad de moneda no valida en indice " + i);
+        return result;
     }
 
     private static string? ValueAfter(string[] args, string flag)

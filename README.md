@@ -115,3 +115,23 @@ Para importes compatibles con programación dinámica, se utiliza **una sola tab
 ### Corrección del formulario WinForms
 
 La interfaz gráfica comparte las operaciones transaccionales del motor en lugar de sobrescribir `stock.txt` a partir de un estado obsoleto. Los cambios de administrador y las devoluciones limitadas notifican los errores de persistencia y recargan el inventario. La lista del resultado ya no se borra automáticamente al actualizar el panel de stock.
+
+
+## Cambio específico de caja (C# nativo)
+
+Se ha reimplementado la operación \`caja / específico\` del C original.
+\`--specific MONEDA RECIBIDO_CSV ENTREGADO_CSV\` valida que el valor
+monetario recibido sea exactamente igual al devuelto; no modifica stock.
+Con \`--specific-stock\`, cada tipo se actualiza en **una sola transacción**
+\`stock_anterior + monedas_recibidas - monedas_entregadas\`, rechazando los
+saldos negativos y preservando el archivo si falla la comprobación.
+Cada lista debe tener exactamente tantas cantidades como denominaciones
+de esa divisa, ordenadas según \`monedas.txt\`. Ejemplo para una divisa
+con denominaciones 5,3,1:
+
+\`\`\`bash
+dotnet run --project ProgVorazCs.Console -- --specific euro 0,0,5 1,0,0 --specific-stock
+\`\`\`
+
+La operación con stock modifica \`stock.txt\`; use un inventario de prueba
+para este ejemplo. Esta API no ejecuta ni enlaza código C.
