@@ -26,7 +26,8 @@ public static class EnhancedChangeEngine
             throw new ArgumentException("Importe, denominaciones, stock o rango invalidos.");
 
         if (amount.IsZero)
-            return minCoins == 0 ? new Answer(BigInteger.Zero, new BigInteger[denominations.Count]) : null;
+            return minCoins == 0 && !nearest
+                ? new Answer(BigInteger.Zero, new BigInteger[denominations.Count]) : null;
 
         // Las cantidades astronómicas no admiten DP proporcional al monto.
         // Se conserva la ruta exacta de division descendente del programa C para
