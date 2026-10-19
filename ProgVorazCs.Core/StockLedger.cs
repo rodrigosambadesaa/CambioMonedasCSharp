@@ -49,6 +49,29 @@ internal static class StockLedger
         }, out remainder);
     }
 
+    /// <summary>
+    /// Receive and dispense denominations within a single locked stock update.
+    /// Incoming physical coins are available before outgoing coins are checked.
+    /// </summary>
+    public static bool Exchange(string path, string name, int expected,
+        IReadOnlyList<BigInteger> received, IReadOnlyList<BigInteger> returned,
+        out List<BigInteger> updated)
+    {
+        return Apply(path, name, expected, current =>
+        {
+            if (received.Count != expected || returned.Count != expected
+                || received.Any(x => x < 0) || returned.Any(x => x < 0))
+                return null;
+            BigInteger[] next = new BigInteger[expected];
+            for (int i = 0; i < expected; i++)
+            {
+                next[i] = current[i] + received[i] - returned[i];
+                if (next[i] < 0) return null;
+            }
+            return next;
+        }, out updated);
+    }
+
     public static bool Adjust(string path, string name, int expected, int index,
         BigInteger delta, bool add, out List<BigInteger> updated)
     {

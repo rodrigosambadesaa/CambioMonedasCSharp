@@ -147,6 +147,31 @@ try
     Check(service.Repository.TryAdjustStock("euro", 1, BigInteger.One, true, out balance),
           "administrador añade");
     Check(balance[1] == 2, "restauracion de delta");
+    // Cambio especifico exacto: depositar cinco monedas de 1 y devolver una de 5.
+    var exchange = SpecificExchange.Execute(service.Repository, "euro",
+        [0,0,5], [1,0,0], updateStock: true);
+    Check(exchange?.TotalCents == 5, "especifico valor equivalente");
+    Check(exchange.CurrentStock.SequenceEqual(
+        [new BigInteger(3), new BigInteger(2), new BigInteger(5)]),
+        "especifico ingresa y descuenta en una transaccion");
+    var snapshotExchange = service.Repository.LoadStock("euro")!.ToArray();
+    Check(SpecificExchange.Execute(service.Repository, "euro",
+        [0,2,0], [0,0,6], updateStock: true) is null,
+        "especifico rechaza inventario insuficiente");
+    Check(SpecificExchange.Execute(service.Repository, "euro",
+        [0,0,1], [1,0,0], updateStock: true) is null,
+        "especifico rechaza diferencia de importe");
+    Check(service.Repository.LoadStock("euro")!.SequenceEqual(snapshotExchange),
+        "los fallos del cambio especifico no mutan inventario");
+    var unlimited = SpecificExchange.Execute(service.Repository, "euro",
+        [0,0,5], [1,0,0], updateStock: false);
+    Check(unlimited?.TotalCents == 5
+        && service.Repository.LoadStock("euro")!.SequenceEqual(snapshotExchange),
+        "especifico ilimitado sin efectos secundarios");
+    Check(service.Repository.TryExchangeStock("euro",
+        [1,0,0], [0,0,5], out var resetExchange), "inversa atomica");
+    Check(resetExchange.SequenceEqual([new BigInteger(4),new BigInteger(2),BigInteger.Zero]),
+        "restaura inventario para el resto de pruebas");
     service.Snapshot(Path.Combine(temp, "backup.txt"));
     var data = service.Repository.LoadCurrency("euro")!;
     Check(data.Stock.SequenceEqual([new BigInteger(4), new BigInteger(2), BigInteger.Zero]), "stock -1");
