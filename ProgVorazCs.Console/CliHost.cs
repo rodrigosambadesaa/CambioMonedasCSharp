@@ -73,14 +73,14 @@ public static class CliHost
                 if (!BigInteger.TryParse(args[conversion + 3], NumberStyles.None,
                     CultureInfo.InvariantCulture, out var amount) || amount < 0)
                     throw new ArgumentException("Importe invalido.");
-                if (from != to)
-                    throw new NotSupportedException("La conversion entre divisas requiere una fuente de tasas verificada.");
+                decimal rate = ExchangeRates.GetRateAsync(from, to, dataRoot).GetAwaiter().GetResult();
+                BigInteger destinationAmount = ExchangeRates.ConvertCents(amount, rate);
                 CurrencyData currency = services.Repository.LoadCurrency(to)
                     ?? throw new ArgumentException("Moneda desconocida: " + to);
-                var answer = EnhancedChangeEngine.Compute(amount, currency.Denominations,
+                var answer = EnhancedChangeEngine.Compute(destinationAmount, currency.Denominations,
                     args.Contains("--convert-stock") ? currency.Stock : null);
                 if (answer is null) throw new InvalidOperationException("No hay descomposicion exacta.");
-                System.Console.WriteLine("Origen=" + amount + " Destino=" + answer.Covered + " Tasa=1");
+                System.Console.WriteLine("Origen=" + amount + " Destino=" + destinationAmount + " Tasa=" + rate.ToString(CultureInfo.InvariantCulture));
                 for (int i = 0; i < answer.Counts.Length; i++)
                     System.Console.WriteLine(currency.Denominations[i] + ":" + answer.Counts[i]);
                 return 0;
@@ -88,7 +88,7 @@ public static class CliHost
             throw new ArgumentException("Opcion no reconocida. Use --help.");
         }
         catch (Exception error) when (error is IOException or ArgumentException or InvalidDataException
-            or InvalidOperationException or NotSupportedException or UnauthorizedAccessException)
+            or InvalidOperationException or NotSupportedException or UnauthorizedAccessException or System.Text.Json.JsonException or HttpRequestException)
         {
             System.Console.Error.WriteLine(error.Message);
             return 2;

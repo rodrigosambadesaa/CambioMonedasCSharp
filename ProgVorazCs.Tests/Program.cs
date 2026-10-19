@@ -39,6 +39,9 @@ try
 {
     File.WriteAllText(Path.Combine(temp, "monedas.txt"), "euro\n5\n3\n1\ndolar\n10\n1\n");
     File.WriteAllText(Path.Combine(temp, "stock.txt"), "euro\n4\n2\n-1\ndolar\n1\n2\n");
+    File.WriteAllText(Path.Combine(temp, "rates_stub.json"), "{\"EUR_USD\":1.09,\"USD_EUR\":0.917}");
+    Check(ExchangeRates.LoadStub("EUR", "USD", temp) == 1.09m, "stub EUR USD");
+    Check(ExchangeRates.LoadStub("USD", "EUR", temp) == 0.917m, "stub USD EUR");
     var service = new PortableServices(temp);
     Check(service.Validate("EUR"), "validacion EUR");
     service.Snapshot(Path.Combine(temp, "backup.txt"));
@@ -91,4 +94,17 @@ try
     }
 }
 finally { Directory.Delete(temp, true); }
+Check(ExchangeRates.IsoCode("USD") == "USD", "ISO USD");
+Check(ExchangeRates.IsoCode("franco_suizo") == "CHF", "ISO CHF");
+Check(ExchangeRates.ConvertCents(100, 1.09m) == 109, "EUR USD stub");
+Check(ExchangeRates.ConvertCents(109, 0.917m) == 100, "USD EUR stub");
+Check(ExchangeRates.ConvertCents(1, 0.5m) == 1, "redondeo medio");
+Check(ExchangeRates.ConvertCents(BigInteger.Parse("999999999999999999999999999999"), 1m)
+      == BigInteger.Parse("999999999999999999999999999999"), "no pierde precision BigInt");
+try
+{
+    _ = ExchangeRates.ConvertCents(-1, 1m);
+    throw new Exception("se acepto importe negativo");
+}
+catch (ArgumentOutOfRangeException) {}
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
