@@ -46,7 +46,7 @@ public sealed class PortableServices
         };
     }
 
-    public void ExportJson(string filename)
+    public string StockAsJson()
     {
         var entries = new List<object>();
         foreach (string name in repository.LoadCurrencyNames())
@@ -60,9 +60,12 @@ public sealed class PortableServices
                 stock = c.Stock.Select(x => x.ToString(CultureInfo.InvariantCulture)).ToArray()
             });
         }
-        File.WriteAllText(filename, JsonSerializer.Serialize(new { monedas = entries },
-            new JsonSerializerOptions { WriteIndented = true }));
+        return JsonSerializer.Serialize(new { monedas = entries },
+            new JsonSerializerOptions { WriteIndented = true });
     }
+
+    public void ExportJson(string filename) =>
+        File.WriteAllText(filename, StockAsJson(), new UTF8Encoding(false));
 
     public void ExportReport(string filename)
     {

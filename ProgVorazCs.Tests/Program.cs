@@ -57,6 +57,38 @@ try
     Check(service.Repository.UpdateStock("euro", [0, 0, 0]), "actualizar stock");
     service.Restore(Path.Combine(temp, "backup.txt"));
     Check(service.Repository.LoadStock("euro")![0] == 4, "restaurar stock");
+
+    // HTTP local parity: health, stock JSON, batch CSV, 404 y request demasiado grande.
+    var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+    socket.Start();
+    int port = ((System.Net.IPEndPoint)socket.LocalEndpoint).Port;
+    socket.Stop();
+    using (var cancellation = new CancellationTokenSource())
+    using (var client = new HttpClient(new HttpClientHandler { UseProxy = false }))
+    {
+        Task server = LocalHttpServer.ServeAsync(service, port, cancellation.Token);
+        try
+        {
+            string url = "http://127.0.0.1:" + port;
+            Check(await client.GetStringAsync(url + "/health") == "OK", "HTTP health");
+            string stockJson = await client.GetStringAsync(url + "/export_stock_json");
+            Check(stockJson.Contains("\"nombre\": \"euro\""), "HTTP JSON");
+            using var response = await client.PostAsync(url + "/batch",
+                new StringContent("mode,moneda,monto\na,euro,6\n", System.Text.Encoding.UTF8, "text/csv"));
+            Check(response.IsSuccessStatusCode, "HTTP batch status");
+            Check((await response.Content.ReadAsStringAsync()).Contains("OK total=2"), "HTTP batch");
+            var notFound = await client.GetAsync(url + "/missing");
+            Check(notFound.StatusCode == System.Net.HttpStatusCode.NotFound, "HTTP 404");
+            using var oversize = new ByteArrayContent(new byte[1024 * 1024 + 1]);
+            var tooLarge = await client.PostAsync(url + "/batch", oversize);
+            Check(tooLarge.StatusCode == System.Net.HttpStatusCode.RequestEntityTooLarge, "HTTP 413");
+        }
+        finally
+        {
+            cancellation.Cancel();
+            await server;
+        }
+    }
 }
 finally { Directory.Delete(temp, true); }
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
