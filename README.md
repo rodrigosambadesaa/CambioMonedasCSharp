@@ -67,3 +67,21 @@ curl -X POST --data-binary @tests/sample_batch.csv http://127.0.0.1:8080/batch
 ```
 
 Se escucha **únicamente** en `127.0.0.1`, con límite de 1 MiB por petición batch. No hay procesos ni archivos temporales auxiliares. Este cambio no incorpora todavía conversión entre divisas con tasas remotas.
+
+
+## Conversion de divisas (paridad del original C)
+
+Se ha incorporado un proveedor de tipos de cambio con JSON válido, códigos
+ISO de las nueve monedas y aritmética \`BigInteger\` para evitar desbordamientos.
+Se utiliza primero la API configurada en la versión C y, ante fallos, el
+fichero \`rates_stub.json\` para los pares explícitamente definidos.
+La variable \`PROGVORAZ_EXCHANGE_SOURCE=stub\` fuerza la reproducción
+determinista sin red:
+
+\`\`\`bash
+PROGVORAZ_EXCHANGE_SOURCE=stub dotnet run --project ProgVorazCs.Console -- --convert EUR USD 100
+\`\`\`
+
+Una tasa de ejemplo del stub no representa una cotización real ni actual.
+Si falta una tasa y falla la API, se retorna error, sin utilizar tasas
+inventadas. Se redondea a céntimos con precisión decimal.
