@@ -21,6 +21,80 @@ static void Match(BigInteger amount, int[] values, int[]? stock, int min, int? m
         Check(answer.Counts.Zip(limits, (a,b) => a <= b).All(x => x), "inventario superado");
 }
 
+
+// Oráculo independiente por enumeración exhaustiva de combinaciones.
+// Contrasta la DP, el inventario, el rango de piezas y el importe cercano.
+static (int Covered, int Pieces)? Oracle(int amount, int[] denominations,
+    int[]? stock, int minCoins, int? maxCoins, bool nearest)
+{
+    int bestAmount = -1;
+    int bestPieces = int.MaxValue;
+    void Search(int index, int covered, int pieces)
+    {
+        if (covered > amount || maxCoins.HasValue && pieces > maxCoins.Value) return;
+        if (index == denominations.Length)
+        {
+            if (pieces < minCoins || covered == 0 && nearest ||
+                !nearest && covered != amount) return;
+            if (covered > bestAmount || covered == bestAmount && pieces < bestPieces)
+            {
+                bestAmount = covered;
+                bestPieces = pieces;
+            }
+            return;
+        }
+        int limit = (amount - covered) / denominations[index];
+        if (stock is not null) limit = Math.Min(limit, stock[index]);
+        for (int count = 0; count <= limit; ++count)
+            Search(index + 1, covered + count * denominations[index], pieces + count);
+    }
+    Search(0, 0, 0);
+    return bestAmount < 0 ? null : (bestAmount, bestPieces);
+}
+
+static void ExhaustiveDifferential()
+{
+    Random random = new(0xC0FFEE);
+    for (int iteration = 0; iteration < 80; ++iteration)
+    {
+        int count = random.Next(2, 6);
+        int[] denominations = Enumerable.Range(1, 10).OrderBy(_ => random.Next())
+            .Take(count).OrderDescending().ToArray();
+        int[] stock = Enumerable.Range(0, count).Select(_ => random.Next(0, 4)).ToArray();
+        int amount = random.Next(0, 25);
+
+        foreach (bool limited in new[] { false, true })
+        {
+            int[]? actualStock = limited ? stock : null;
+            foreach (var cfg in new[] {
+                (Min:0, Max:(int?)null, Near:false),
+                (Min:2, Max:(int?)4, Near:false),
+                (Min:1, Max:(int?)6, Near:true)
+            })
+            {
+                var reference = Oracle(amount, denominations, actualStock, cfg.Min, cfg.Max, cfg.Near);
+                var answer = EnhancedChangeEngine.Compute(amount,
+                    denominations.Select(x => (BigInteger)x).ToArray(),
+                    actualStock?.Select(x => (BigInteger)x).ToArray(),
+                    cfg.Min, cfg.Max, cfg.Near);
+                Check((reference is not null) == (answer is not null),
+                    $"Diferencial existencia iter={iteration}, cantidad={amount}, limitado={limited}");
+                if (answer is null || reference is null) continue;
+                Check(answer.Covered == reference.Value.Covered
+                    && answer.TotalCoins == reference.Value.Pieces,
+                    $"Diferencial optimizacion iter={iteration}, cantidad={amount}, limitado={limited}");
+                Check(answer.Counts.Zip(denominations,
+                    (pieces, value) => pieces * value).Aggregate(BigInteger.Zero, (a, b) => a+b)
+                    == answer.Covered, "Diferencial reconstruccion de valor");
+                if (actualStock is not null)
+                    Check(answer.Counts.Zip(actualStock, (a, b) => a <= b).All(x => x),
+                        "Diferencial exceso de stock");
+            }
+        }
+    }
+}
+
+ExhaustiveDifferential();
 Match(6, [4,3,1], null, 0, null, true, 2);
 Match(6, [4,3,1], [1,2,1], 0, null, true, 2);
 Match(8, [5,3,1], [1,0,2], 0, null, false);

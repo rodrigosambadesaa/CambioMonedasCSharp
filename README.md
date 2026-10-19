@@ -97,3 +97,13 @@ atómica. Si otra instancia consume las piezas antes, se informa al usuario en
 lugar de persistir un stock negativo. Las pruebas de regresión incluyen operaciones
 concurrentes, saldo insuficiente y protección entre bloques. Los procesos ajenos
 al módulo, como el programa original en C, **no comparten el bloqueo**.
+
+
+## Pruebas diferenciales exhaustivas
+
+La suite \`ProgVorazCs.Tests\` compara el algoritmo de precisión arbitraria
+con un oráculo independiente que enumera combinaciones de monedas.
+Hay 480 escenarios deterministas con distintos stocks, cantidades, límites
+de piezas y cambio cercano, además de las pruebas de persistencia, HTTP,
+concurrencia e integridad previamente existentes. No se usa el propio motor
+para calcular los resultados esperados.
