@@ -32,6 +32,14 @@ jobs:
           dotnet build ProgVorazCs.Core/ProgVorazCs.Core.csproj --configuration Release
           dotnet build ProgVorazCs.Console/ProgVorazCs.Console.csproj --configuration Release
 
+      - name: Test motor y datos (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: dotnet run --project ProgVorazCs.Tests --configuration Release
+
+      - name: Test motor y datos (Windows)
+        if: runner.os == 'Windows'
+        run: dotnet run --project ProgVorazCs.Tests --configuration Release
+
       - name: Smoke consola modo a (Linux/macOS)
         if: runner.os != 'Windows'
         run: |

@@ -4,7 +4,7 @@ using ProgVorazCs.Core;
 
 internal static class Program
 {
-    private static int Main()
+    private static int Main(string[] args)
     {
         string? dataRoot = FindDataRoot();
         if (dataRoot is null)
@@ -12,6 +12,9 @@ internal static class Program
             Console.WriteLine("No se encontraron monedas.txt y stock.txt.");
             return 1;
         }
+
+        int? commandResult = ProgVorazCs.ConsoleApp.CliHost.TryRun(args, dataRoot);
+        if (commandResult.HasValue) return commandResult.Value;
 
         CurrencyRepository repo = new(dataRoot);
         while (true)

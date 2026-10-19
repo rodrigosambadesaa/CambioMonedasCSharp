@@ -1,0 +1,62 @@
+using System.Numerics;
+using ProgVorazCs.Core;
+
+static void Check(bool condition, string reason)
+{
+    if (!condition) throw new Exception(reason);
+}
+
+static void Match(BigInteger amount, int[] values, int[]? stock, int min, int? max, bool shouldExist, int? pieces = null)
+{
+    var denomination = values.Select(x => new BigInteger(x)).ToArray();
+    var limits = stock?.Select(x => new BigInteger(x)).ToArray();
+    var answer = EnhancedChangeEngine.Compute(amount, denomination, limits, min, max);
+    Check((answer is not null) == shouldExist, "existencia: " + amount);
+    if (answer is null) return;
+    Check(answer.Counts.Length == values.Length, "longitud incorrecta");
+    Check(answer.Counts.Zip(denomination, (a, b) => a*b).Aggregate(BigInteger.Zero, (a,b) => a+b) == amount, "suma incorrecta");
+    Check(answer.TotalCoins >= min && (max is null || answer.TotalCoins <= max), "rango incorrecto");
+    if (pieces is not null) Check(answer.TotalCoins == pieces, "cantidad no optima");
+    if (limits is not null)
+        Check(answer.Counts.Zip(limits, (a,b) => a <= b).All(x => x), "inventario superado");
+}
+
+Match(6, [4,3,1], null, 0, null, true, 2);
+Match(6, [4,3,1], [1,2,1], 0, null, true, 2);
+Match(8, [5,3,1], [1,0,2], 0, null, false);
+Match(6, [4,3,1], null, 3, 3, true, 3);
+Match(6, [4,3,1], [1,2,0], 3, 3, false);
+Match(6, [4,3,1], [0,2,0], 2, 2, true, 2);
+Match(6, [4,3,1], [1,1,0], 0, null, false);
+Match(0, [4,3,1], null, 0, null, true, 0);
+Match(BigInteger.Parse("99999999999999999999999999999999999"), [5,1], null, 0, null, true);
+var nearest = EnhancedChangeEngine.Compute(11, [new BigInteger(6), new BigInteger(4)], nearest: true);
+Check(nearest?.Covered == 10, "importe cercano incorrecto");
+
+string temp = Path.Combine(Path.GetTempPath(), "progvoraz-tests-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(temp);
+try
+{
+    File.WriteAllText(Path.Combine(temp, "monedas.txt"), "euro\n5\n3\n1\ndolar\n10\n1\n");
+    File.WriteAllText(Path.Combine(temp, "stock.txt"), "euro\n4\n2\n-1\ndolar\n1\n2\n");
+    var service = new PortableServices(temp);
+    Check(service.Validate("EUR"), "validacion EUR");
+    service.Snapshot(Path.Combine(temp, "backup.txt"));
+    var data = service.Repository.LoadCurrency("euro")!;
+    Check(data.Stock.SequenceEqual([new BigInteger(4), new BigInteger(2), BigInteger.Zero]), "stock -1");
+    using StringReader input = new("mode,moneda,monto,range\na,EUR,6,\nb,EUR,6,\na,EUR,6,3-3\n");
+    using StringWriter output = new();
+    service.RunBatch(input, output);
+    string csv = output.ToString();
+    Check(csv.Split("OK total=2").Length - 1 == 2 && csv.Contains(",NO,"),
+        "resultado de batch");
+    service.ExportJson(Path.Combine(temp, "stock.json"));
+    Check(File.ReadAllText(Path.Combine(temp, "stock.json")).Contains("\"nombre\": \"euro\""), "export JSON");
+    service.ExportReport(Path.Combine(temp, "report.txt"));
+    Check(File.ReadAllText(Path.Combine(temp, "report.txt")).Contains("valor_centimos="), "reporte");
+    Check(service.Repository.UpdateStock("euro", [0, 0, 0]), "actualizar stock");
+    service.Restore(Path.Combine(temp, "backup.txt"));
+    Check(service.Repository.LoadStock("euro")![0] == 4, "restaurar stock");
+}
+finally { Directory.Delete(temp, true); }
+Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
