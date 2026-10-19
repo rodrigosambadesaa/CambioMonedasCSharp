@@ -7,3 +7,7 @@ obj/
 *.swp
 *.tmp
 *.log
+
+# Lock files and atomic inventory staging
+stock.txt.lock
+.stock-*.tmp
