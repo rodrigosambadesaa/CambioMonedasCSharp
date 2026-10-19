@@ -27,6 +27,7 @@ public static class CliHost
                 System.Console.WriteLine("--lang es|en --json --export-stock-json FILE --export-report FILE");
                 System.Console.WriteLine("--snapshot-stock FILE --restore-stock FILE --convert FROM TO CENTS [--convert-stock]");
                 System.Console.WriteLine("--specific CURRENCY RECEIVED_CSV RETURNED_CSV [--specific-stock]");
+                System.Console.WriteLine("--history [--tail N] --summary CURRENCY");
                 System.Console.WriteLine("--server [--port N] (solo 127.0.0.1) --version --help");
                 return 0;
             }
@@ -36,6 +37,24 @@ public static class CliHost
                 return 0;
             }
             PortableServices services = new(dataRoot);
+            if (args.Contains("--history"))
+            {
+                int limit = 100;
+                string? rawLimit = ValueAfter(args, "--tail");
+                if (rawLimit is not null &&
+                    (!int.TryParse(rawLimit, NumberStyles.None, CultureInfo.InvariantCulture,
+                        out limit) || limit < 1 || limit > 1000))
+                    throw new ArgumentException("Limite de historial fuera de 1-1000.");
+                foreach (string entry in services.History(limit)) System.Console.WriteLine(entry);
+                return 0;
+            }
+            if (args.Contains("--summary"))
+            {
+                string? key = ValueAfter(args, "--summary");
+                if (key is null) throw new ArgumentException("Indique moneda para --summary");
+                System.Console.WriteLine(services.CurrencySummary(key));
+                return 0;
+            }
             if (args.Contains("--server"))
             {
                 string portText = ValueAfter(args, "--port") ?? "8080";

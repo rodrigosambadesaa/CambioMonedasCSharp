@@ -67,6 +67,29 @@ public sealed class PortableServices
     public void ExportJson(string filename) =>
         File.WriteAllText(filename, StockAsJson(), new UTF8Encoding(false));
 
+    public IReadOnlyList<string> History(int limit = 100)
+    {
+        if (limit <= 0 || limit > 1000)
+            throw new ArgumentOutOfRangeException(nameof(limit), "Limite permitido: 1-1000");
+        string path = Path.Combine(root, "historial.txt");
+        return File.Exists(path) ? File.ReadLines(path).TakeLast(limit).ToArray() : [];
+    }
+
+    public string CurrencySummary(string currency)
+    {
+        string key = MapCurrency(currency);
+        if (!Validate(key))
+            throw new ArgumentException("Moneda inexistente o inventario inconsistente.");
+        CurrencyData data = repository.LoadCurrency(key)!;
+        BigInteger pieces = data.Stock.Aggregate(BigInteger.Zero, (a, b) => a+b);
+        BigInteger value = data.Denominations.Zip(data.Stock, (d, s) => d*s)
+            .Aggregate(BigInteger.Zero, (a, b) => a+b);
+        return "Moneda=" + key + " Denominaciones=" + data.Denominations.Count
+            + " Min=" + data.Denominations.Min()
+            + " Max=" + data.Denominations.Max()
+            + " Piezas=" + pieces + " ValorCentimos=" + value;
+    }
+
     public void ExportReport(string filename)
     {
         using StreamWriter writer = new(filename, false, new UTF8Encoding(false));
