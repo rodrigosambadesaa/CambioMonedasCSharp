@@ -54,3 +54,16 @@ Este repositorio incluye tags equivalentes de migracion en C#:
 - `v0.4.0-cs`
 - `v0.5.0-cs-rc1`
 - `v0.5.0-cs`
+
+## Servidor HTTP local
+
+Reimplementación administrada de las rutas originales del servidor C:
+
+```bash
+dotnet run --project ProgVorazCs.Console -- --server --port 8080
+curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/export_stock_json
+curl -X POST --data-binary @tests/sample_batch.csv http://127.0.0.1:8080/batch
+```
+
+Se escucha **únicamente** en `127.0.0.1`, con límite de 1 MiB por petición batch. No hay procesos ni archivos temporales auxiliares. Este cambio no incorpora todavía conversión entre divisas con tasas remotas.

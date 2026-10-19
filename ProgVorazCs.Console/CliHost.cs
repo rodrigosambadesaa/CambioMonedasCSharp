@@ -26,7 +26,7 @@ public static class CliHost
                 System.Console.WriteLine("ProgVoraz C# --input CSV [--output CSV] [--log LOG] | --stream | --docker");
                 System.Console.WriteLine("--lang es|en --json --export-stock-json FILE --export-report FILE");
                 System.Console.WriteLine("--snapshot-stock FILE --restore-stock FILE --convert FROM TO CENTS [--convert-stock]");
-                System.Console.WriteLine("--version --help");
+                System.Console.WriteLine("--server [--port N] (solo 127.0.0.1) --version --help");
                 return 0;
             }
             if (args.Contains("--version") || args.Contains("-v"))
@@ -35,6 +35,22 @@ public static class CliHost
                 return 0;
             }
             PortableServices services = new(dataRoot);
+            if (args.Contains("--server"))
+            {
+                string portText = ValueAfter(args, "--port") ?? "8080";
+                if (!int.TryParse(portText, NumberStyles.None, CultureInfo.InvariantCulture,
+                    out int port) || port < 1 || port > 65535)
+                    throw new ArgumentException("Puerto HTTP invalido.");
+                using CancellationTokenSource cancellation = new();
+                System.Console.CancelKeyPress += (_, ev) =>
+                {
+                    ev.Cancel = true;
+                    cancellation.Cancel();
+                };
+                System.Console.WriteLine("Servidor local en http://127.0.0.1:" + port);
+                LocalHttpServer.ServeAsync(services, port, cancellation.Token).GetAwaiter().GetResult();
+                return 0;
+            }
             if (json is not null) { services.ExportJson(json); return 0; }
             if (report is not null) { services.ExportReport(report); return 0; }
             if (snap is not null) { services.Snapshot(snap); return 0; }
