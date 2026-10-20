@@ -50,6 +50,29 @@ jobs:
         if: runner.os == 'Windows'
         run: dotnet run --project ProgVorazCs.Tests --configuration Release
 
+      - name: Test limite y cambio cercano interactivo (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          printf 'a\neuro\nlimite\n=3\n6\nsalir\n' | \
+            dotnet run --project ProgVorazCs.Console --configuration Release --no-build > interactive-limit.txt
+          grep -q 'Cambio aceptado: 6 céntimos; piezas=3' interactive-limit.txt
+
+      - name: Test limite interactivo (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $result = @"
+          a
+          euro
+          limite
+          =3
+          6
+          salir
+          "@ | dotnet run --project ProgVorazCs.Console --configuration Release --no-build | Out-String
+          if ($result -notmatch 'Cambio aceptado: 6' -or $result -notmatch 'piezas=3') {
+              throw 'Interactive coin-limit test failed'
+          }
+
       - name: Smoke consola modo a (Linux/macOS)
         if: runner.os != 'Windows'
         run: |

@@ -88,7 +88,7 @@ internal static class AppConsole
     {
         while (true)
         {
-            Console.Write("Cantidad en centimos (0, volver o salir): ");
+            Console.Write("Cantidad en centimos (0, volver, limite, cercano o salir): ");
             string input = (Console.ReadLine() ?? string.Empty).Trim();
             string command = TextKey.Normalize(input);
 
@@ -100,6 +100,14 @@ internal static class AppConsole
             if (command is "volver" or "0")
             {
                 return true;
+            }
+
+            if (command is "limite" or "limit" or "l" or "cercano" or "nearest")
+            {
+                if (!RunAdvancedChange(repo, currency, currencyKey, limited,
+                        command is "limite" or "limit" or "l"))
+                    return false;
+                continue;
             }
 
             if (!BigInteger.TryParse(input, NumberStyles.None, CultureInfo.InvariantCulture, out BigInteger amount) || amount < 0)
@@ -171,6 +179,115 @@ internal static class AppConsole
             }
             Console.WriteLine("+--------------------------------------------------+");
         }
+    }
+
+    // The reference C console permits N, =N and N-M exact coin constraints.
+    private static bool ParseCoinRestriction(string raw, out int minimum, out int maximum)
+    {
+        minimum = maximum = 0;
+        string text = new(raw.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        if (text.Length == 0) return false;
+        if (text[0] == '=')
+            return int.TryParse(text[1..], NumberStyles.None,
+                CultureInfo.InvariantCulture, out minimum) &&
+                (maximum = minimum) >= 0;
+        int separator = text.IndexOf('-');
+        if (separator >= 0)
+        {
+            return int.TryParse(text[..separator], NumberStyles.None,
+                    CultureInfo.InvariantCulture, out minimum)
+                && int.TryParse(text[(separator + 1)..], NumberStyles.None,
+                    CultureInfo.InvariantCulture, out maximum)
+                && minimum <= maximum;
+        }
+        return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture,
+            out maximum);
+    }
+
+    private static bool RunAdvancedChange(CurrencyRepository repository,
+        CurrencyData currency, string currencyKey, bool limited, bool withConstraint)
+    {
+        int min = 0;
+        int? max = null;
+        if (withConstraint)
+        {
+            Console.Write("Restricción de monedas (N, =N, N-M, volver): ");
+            string? restriction = Console.ReadLine();
+            if (restriction is null) return false;
+            if (TextKey.Normalize(restriction) is "volver" or "back") return true;
+            if (!ParseCoinRestriction(restriction, out min, out int upper))
+            {
+                Console.WriteLine("Restricción inválida.");
+                return true;
+            }
+            max = upper;
+        }
+        Console.Write("Cantidad en céntimos (volver o salir): ");
+        string? rawAmount = Console.ReadLine();
+        if (rawAmount is null) return false;
+        string command = TextKey.Normalize(rawAmount);
+        if (command is "salir" or "exit" or "quit") return false;
+        if (command is "volver" or "back") return true;
+        if (!BigInteger.TryParse(rawAmount, NumberStyles.None, CultureInfo.InvariantCulture,
+                out BigInteger amount) || amount <= 0)
+        {
+            Console.WriteLine("Importe inválido.");
+            return true;
+        }
+        try
+        {
+            var answer = EnhancedChangeEngine.Compute(amount, currency.Denominations,
+                limited ? currency.Stock : null, min, max, nearest: false);
+            bool closeSuggestion = false;
+            if (answer is null)
+            {
+                answer = EnhancedChangeEngine.Compute(amount, currency.Denominations,
+                    limited ? currency.Stock : null, min, max, nearest: true);
+                closeSuggestion = answer is not null && answer.Covered < amount;
+            }
+            if (answer is null)
+            {
+                Console.WriteLine("No existe cambio exacto ni sugerencia cercana positiva.");
+                return true;
+            }
+            if (closeSuggestion)
+            {
+                Console.WriteLine($"Sugerencia cercana: cubrir {answer.Covered} c " +
+                    $"(faltan {amount - answer.Covered} c).");
+                Console.Write("¿Aceptar sugerencia? (si/no): ");
+                string? confirmation = Console.ReadLine();
+                if (confirmation is null) return false;
+                if (TextKey.Normalize(confirmation) is not ("si" or "sí" or "s" or "y" or "yes"))
+                {
+                    Console.WriteLine("Sugerencia rechazada; el stock no se modifica.");
+                    return true;
+                }
+            }
+            if (limited)
+            {
+                if (!repository.TryConsumeStock(currencyKey, answer.Counts,
+                        out List<BigInteger> updated))
+                {
+                    Console.WriteLine("El stock cambió o no pudo guardarse.");
+                    currency.Stock = repository.LoadStock(currencyKey) ?? currency.Stock;
+                    return true;
+                }
+                currency.Stock = updated;
+            }
+            Console.WriteLine($"Cambio aceptado: {answer.Covered} céntimos; " +
+                $"piezas={answer.TotalCoins}.");
+            for (int i = 0; i < answer.Counts.Length; i++)
+            {
+                Console.WriteLine($"Denominación={currency.Denominations[i]} " +
+                    $"Cantidad={answer.Counts[i]}" +
+                    (limited ? $" Stock={currency.Stock[i]}" : ""));
+            }
+        }
+        catch (NotSupportedException ex)
+        {
+            Console.WriteLine("Búsqueda no soportada: " + ex.Message);
+        }
+        return true;
     }
 
     private static bool RunAdmin(CurrencyRepository repo, CurrencyData currency, string currencyKey)
