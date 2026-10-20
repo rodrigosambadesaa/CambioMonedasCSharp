@@ -216,7 +216,11 @@ internal static class StockLedger
         Func<BigInteger[], BigInteger[]?> transform, out List<BigInteger> final)
     {
         final = [];
-        if (expected <= 0 || !File.Exists(path)) return false;
+        if (expected <= 0) return false;
+        // Do not call File.Exists(stock.txt) before acquiring stock.txt.lock:
+        // on Windows an atomic rename can make File.Exists transiently false,
+        // converting a valid concurrent transaction into a spurious rejection.
+        // Acquire the shared lock first; the actual read is checked under it.
         string? staging = null;
         try
         {
