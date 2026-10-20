@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: rodrigosambadesaa/CambioMonedasCpp
-          ref: ad01db9dc3cab855b677e163ad301bbcaacd854f
+          ref: f028c887696e0113bc02909ddc8a6437cb3c5886
           path: .ci/cpp
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
