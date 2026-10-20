@@ -201,3 +201,9 @@ Para cantidades superiores a 200.000 céntimos y dos denominaciones diferentes, 
 ## Inventarios finitos con importes grandes
 
 Si el inventario tiene hasta 512 piezas y el importe supera 200.000 céntimos, el motor usa una búsqueda exacta dispersa con agrupación binaria, conservando importe y número de piezas por estado. Soporta stock, mínimo/máximo y cambio cercano. Cuando la exploración supera 250.000 estados, se notifica que el cálculo excede el límite de recursos en vez de fabricar un resultado voraz. Pruebas adicionales cubren casos donde el voraz falla aunque exista solución.
+
+## Bloqueo interoperable C# / C++
+
+Las transacciones y restauraciones de inventario usan ahora el **mismo archivo de bloqueo** `stock.txt.lock` que el port C++: `flock(LOCK_EX)` en Linux/macOS y apertura exclusiva Win32 en Windows. El bloqueo protege la operación completa de leer, validar, modificar y reemplazar `stock.txt`. Si no se adquiere, la transacción falla sin escribir resultados.
+
+La integración entre lenguajes se comprueba en GitHub Actions usando ambos ejecutables independientes sobre el **mismo directorio de pruebas**, con operaciones simultáneas y verificación del inventario final. Esta garantía es para los dos ports actualizados en un sistema de archivos local: el programa original C, otros escritores ajenos y montajes de red que no implementen la semántica de bloqueo requerida pueden saltarse este protocolo.

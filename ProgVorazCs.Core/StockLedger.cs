@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using System.Runtime.InteropServices;
 
 namespace ProgVorazCs.Core;
 
@@ -11,22 +12,74 @@ namespace ProgVorazCs.Core;
 /// </summary>
 internal static class StockLedger
 {
-    private static FileStream Acquire(string path)
+    // The C++ port already uses flock(LOCK_EX) on stock.txt.lock on POSIX.
+    // FileShare.None alone is not a portable interoperability contract with
+    // native flock callers. The explicit OS-level lock makes both agree.
+    private const int LockExclusive = 2;
+    private const int LockNonBlocking = 4;
+    private const int LockUnlock = 8;
+
+    [DllImport("libc", EntryPoint = "flock", SetLastError = true)]
+    private static extern int Flock(int descriptor, int operation);
+
+    private sealed class StockLease(FileStream stream, bool posix) : IDisposable
     {
-        string lockFile = path + ".lock";
-        for (int attempt = 0; attempt < 200; ++attempt)
+        public void Dispose()
         {
             try
             {
-                return new FileStream(lockFile, FileMode.OpenOrCreate,
-                    FileAccess.ReadWrite, FileShare.None);
+                if (posix)
+                    _ = Flock(stream.SafeFileHandle.DangerousGetHandle().ToInt32(), LockUnlock);
             }
-            catch (IOException) when (attempt < 199)
+            finally { stream.Dispose(); }
+        }
+    }
+
+    private static IDisposable Acquire(string path)
+    {
+        string lockFile = path + ".lock";
+        if (OperatingSystem.IsWindows())
+        {
+            // Matches C++ CreateFileA(..., dwShareMode=0) semantics.
+            for (int attempt = 0; attempt < 200; ++attempt)
             {
+                try
+                {
+                    return new StockLease(new FileStream(lockFile, FileMode.OpenOrCreate,
+                        FileAccess.ReadWrite, FileShare.None), false);
+                }
+                catch (IOException) when (attempt < 199) { Thread.Sleep(10); }
+            }
+            throw new IOException("No se pudo adquirir el bloqueo Win32 de inventario.");
+        }
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            throw new PlatformNotSupportedException("Se requiere bloqueo POSIX flock o Windows.");
+
+        FileStream stream = new(lockFile, FileMode.OpenOrCreate,
+            FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
+        bool acquired = false;
+        try
+        {
+            int descriptor = stream.SafeFileHandle.DangerousGetHandle().ToInt32();
+            for (int attempt = 0; attempt < 200; ++attempt)
+            {
+                if (Flock(descriptor, LockExclusive | LockNonBlocking) == 0)
+                {
+                    acquired = true;
+                    return new StockLease(stream, true);
+                }
+                int error = Marshal.GetLastPInvokeError();
+                // EAGAIN / EWOULDBLOCK = 11 on Linux, 35 on macOS.
+                if (error != 11 && error != 35)
+                    throw new IOException("No se pudo bloquear el inventario con flock (errno=" + error + ").");
                 Thread.Sleep(10);
             }
+            throw new IOException("Se agotó el plazo de bloqueo de inventario compartido.");
         }
-        throw new IOException("No se pudo adquirir el bloqueo de inventario.");
+        finally
+        {
+            if (!acquired) stream.Dispose();
+        }
     }
 
     /// <summary>
@@ -36,7 +89,7 @@ internal static class StockLedger
     internal static void WithExclusiveLock(string stockPath, Action operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        using FileStream held = Acquire(stockPath);
+        using IDisposable held = Acquire(stockPath);
         operation();
     }
 
@@ -103,7 +156,7 @@ internal static class StockLedger
         string? staging = null;
         try
         {
-            using FileStream held = Acquire(path);
+            using IDisposable held = Acquire(path);
             string[] lines = File.ReadAllLines(path);
             string key = TextKey.Normalize(currency);
             int header = Array.FindIndex(lines, line => TextKey.Normalize(line) == key);
