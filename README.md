@@ -255,3 +255,13 @@ exactamente con el devuelto. En el modo A no cambia inventario; en el
 modo B actualiza `stock.txt` mediante la transacción interproceso
 atómica. Entradas inválidas o valores distintos no modifican el archivo.
 GitHub Actions comprueba ambos resultados del submenú.
+
+## Lecturas concurrentes durante la sustitución atómica en Windows
+
+En Windows, una lectura de `stock.txt` durante `File.Replace` o
+`MoveFileEx` puede fallar transitoriamente como `IOException` **o**
+`UnauthorizedAccessException`. `CurrencyRepository.ReadTokens` reintenta
+ambos errores durante un intervalo máximo aproximado de dos segundos,
+únicamente al abrir/leer el archivo. No reintenta, duplica ni confirma
+ninguna operación de cobro o gasto: las mutaciones siguen protegidas por
+`stock.txt.lock` y se escriben atómicamente.
