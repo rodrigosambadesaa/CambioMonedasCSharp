@@ -244,3 +244,14 @@ descontrolados de recursos. Actions prueba el flujo =3 con 6 céntimos.
 ## Descubrimiento de monedas disponibles
 
 La consola interactiva de C# enumera dinámicamente las monedas reales presentes en `monedas.txt` al entrar en un modo, siguiendo la funcionalidad `mostrar_monedas_disponibles` del archivo `app_console.c` original. La lista no está codificada a mano ni presupone exactamente nueve monedas. Se omiten entradas cuyo inventario/denominaciones sean inconsistentes y se comprueba el resultado en CI.
+
+## Opciones dentro de la moneda seleccionada
+
+El menú de cantidades acepta `especifico`, `historial` y `resumen`,
+como el submenú del C original, además de `limite` y `cercano`.
+`especifico` lee dos listas CSV con una cantidad por denominación;
+comprueba con aritmética BigInteger que el importe recibido coincida
+exactamente con el devuelto. En el modo A no cambia inventario; en el
+modo B actualiza `stock.txt` mediante la transacción interproceso
+atómica. Entradas inválidas o valores distintos no modifican el archivo.
+GitHub Actions comprueba ambos resultados del submenú.

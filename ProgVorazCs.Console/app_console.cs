@@ -27,7 +27,7 @@ internal static class AppConsole
                 break;
             }
 
-            if (!RunMode(repo, mode))
+            if (!RunMode(repo, services, mode))
             {
                 break;
             }
@@ -37,7 +37,7 @@ internal static class AppConsole
         return 0;
     }
 
-    private static bool RunMode(CurrencyRepository repo, int mode)
+    private static bool RunMode(CurrencyRepository repo, PortableServices services, int mode)
     {
         while (true)
         {
@@ -78,7 +78,7 @@ internal static class AppConsole
                 continue;
             }
 
-            if (!RunChange(repo, currency, PortableServices.MapCurrency(command), mode == 'b'))
+            if (!RunChange(repo, services, currency, PortableServices.MapCurrency(command), mode == 'b'))
             {
                 return false;
             }
@@ -101,11 +101,11 @@ internal static class AppConsole
         Console.WriteLine("---------------------------");
     }
 
-    private static bool RunChange(CurrencyRepository repo, CurrencyData currency, string currencyKey, bool limited)
+    private static bool RunChange(CurrencyRepository repo, PortableServices services, CurrencyData currency, string currencyKey, bool limited)
     {
         while (true)
         {
-            Console.Write("Cantidad en centimos (0, volver, limite, cercano o salir): ");
+            Console.Write("Cantidad en centimos (0, volver, limite, cercano, especifico, historial, resumen o salir): ");
             string input = (Console.ReadLine() ?? string.Empty).Trim();
             string command = TextKey.Normalize(input);
 
@@ -117,6 +117,27 @@ internal static class AppConsole
             if (command is "volver" or "0")
             {
                 return true;
+            }
+
+            if (command is "especifico" or "specific" or "e" or "2")
+            {
+                if (!RunSpecificForCurrency(repo, currency, currencyKey, limited))
+                    return false;
+                continue;
+            }
+
+            if (command is "historial" or "history" or "h" or "3")
+            {
+                Console.WriteLine("--- HISTORIAL DE TRANSACCIONES ---");
+                foreach (string entry in services.History(30))
+                    Console.WriteLine(entry);
+                continue;
+            }
+
+            if (command is "resumen" or "summary" or "r" or "4")
+            {
+                Console.WriteLine(services.CurrencySummary(currencyKey));
+                continue;
             }
 
             if (command is "limite" or "limit" or "l" or "cercano" or "nearest")
@@ -196,6 +217,48 @@ internal static class AppConsole
             }
             Console.WriteLine("+--------------------------------------------------+");
         }
+    }
+
+    /// <summary>
+    /// Original C sub-option "especifico" for the already selected currency.
+    /// Unlimited mode validates values without modifying stock. Limited mode
+    /// commits via the shared exclusive-lock transaction, never a stale read.
+    /// </summary>
+    private static bool RunSpecificForCurrency(CurrencyRepository repository,
+        CurrencyData currency, string currencyKey, bool limited)
+    {
+        Console.WriteLine("Denominaciones: " + string.Join(", ", currency.Denominations));
+        Console.Write("Cantidades recibidas, separadas por comas: ");
+        string? receivedLine = Console.ReadLine();
+        if (receivedLine is null) return false;
+        Console.Write("Cantidades entregadas, separadas por comas: ");
+        string? returnedLine = Console.ReadLine();
+        if (returnedLine is null) return false;
+        try
+        {
+            BigInteger[] received = ReadCoinCounts(receivedLine, currency.Denominations.Count);
+            BigInteger[] returned = ReadCoinCounts(returnedLine, currency.Denominations.Count);
+            SpecificExchange.Result? answer = SpecificExchange.Execute(
+                repository, currencyKey, received, returned, limited);
+            if (answer is null)
+            {
+                Console.WriteLine("Cambio específico rechazado: importes diferentes o stock insuficiente.");
+                return true;
+            }
+            if (limited)
+                currency.Stock = answer.CurrentStock.ToList();
+            Console.WriteLine($"Cambio específico correcto. Valor={answer.TotalCents} céntimos. " +
+                (limited ? "Stock actualizado atómicamente." : "Stock sin cambios."));
+            for (int i = 0; i < returned.Length; i++)
+                Console.WriteLine($"Denominación={currency.Denominations[i]} " +
+                    $"Recibidas={received[i]} Entregadas={returned[i]}");
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or
+            UnauthorizedAccessException or InvalidDataException)
+        {
+            Console.WriteLine("Cambio específico rechazado: " + ex.Message);
+        }
+        return true;
     }
 
     // The reference C console permits N, =N and N-M exact coin constraints.
