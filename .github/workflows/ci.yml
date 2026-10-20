@@ -14,6 +14,14 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Verify separated C# console module
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "ProgVorazCs.Console/app_console.cs")) { throw "Missing console module" }
+          if (-not (Select-String -Path "ProgVorazCs.Console/app_console.cs" -Pattern "class AppConsole")) {
+            throw "AppConsole implementation missing"
+          }
+
       - name: Checkout
         uses: actions/checkout@v5
 

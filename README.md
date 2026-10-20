@@ -211,3 +211,21 @@ La integración entre lenguajes se comprueba en GitHub Actions usando ambos ejec
 ### Inicio robusto durante cambios simultáneos de inventario
 
 En Windows, la detección del directorio de datos vuelve a comprobar durante un intervalo acotado la presencia de `stock.txt` si hay un reemplazo atómico en curso. Se evita que una consulta `File.Exists` transitoriamente negativa termine toda la aplicación con un falso error «No se encontraron monedas.txt y stock.txt». No se repiten consumos de monedas ni se ignoran pérdidas definitivas del archivo.
+
+## Módulo app_console.cs
+
+El C original separa el punto de entrada y la consola interactiva mediante
+main.c y app_console.c. La versión en C# también cuenta ahora con dos unidades:
+
+- ProgVorazCs.Console/Program.cs: entrada Main y delegación
+- ProgVorazCs.Console/app_console.cs: implementación AppConsole.Run,
+  menús interactivos, lectura de cantidades y denominaciones, visualización
+  textual y JSON, administración transaccional del stock, comandos para
+  conversiones, historial, resumen y operaciones de caja
+- ProgVorazCs.Console/CliHost.cs: argumentos CLI, procesos no interactivos
+- ProgVorazCs.Core/: algoritmos BigInteger, persistencia y operaciones de caja
+
+El proyecto SDK de .NET incluye app_console.cs automáticamente, sin enlaces
+al programa original en C. La extracción conserva el comportamiento existente.
+No supone que toda la lógica restante de app_console.c esté ya portada; esa
+equivalencia se comprueba separadamente con tests y nuevos módulos.
