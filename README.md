@@ -193,3 +193,7 @@ Linux, macOS y Windows.
 ## Cambio exacto para importes grandes no canónicos
 
 El motor usa Dijkstra sobre los residuos del valor de la mayor denominación (hasta 50.000 céntimos). Minimiza de manera demostrable el número de piezas cuando la clase de residuo tiene una representación mínima que cabe en el importe. Se mantiene la ruta BigInteger para cantidades astronómicas. Los ejemplos de regresión incluyen denominaciones `4,3,1`, donde el algoritmo voraz resulta subóptimo.
+
+## Solución exacta con dos denominaciones, incluso con stock
+
+Para cantidades superiores a 200.000 céntimos y dos denominaciones diferentes, el motor aplica Euclides extendido y aritmética diofántica `a·x + b·y = importe`. Calcula la solución con menos monedas y respeta las disponibilidades de inventario, los mínimos y máximos de piezas sin reservar memoria proporcional al importe. Se comprueban cantidades BigInteger astronómicas y casos sin solución.
