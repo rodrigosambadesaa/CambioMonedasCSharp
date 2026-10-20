@@ -90,11 +90,13 @@ with tempfile.TemporaryDirectory(prefix="cambio-shared-lock-") as directory:
                     f"{label} ignored exclusive lock or exited {process.returncode}: {out} / {err}"
                 )
         assert read_stock(stockfile) == (0, 0, 200), "writes bypassed lock"
-    for process in (first, second):
+    for name, process in (("C++", first), ("C#", second)):
         out, err = process.communicate(timeout=30)
-        assert process.returncode == 0 and "OK moneda=euro" in out, (
-            process.returncode, out, err
-        )
+        if process.returncode != 0 or "OK moneda=euro" not in out:
+            raise AssertionError(
+                f"initial concurrent operation {name} failed: rc={process.returncode}, "
+                f"stdout={out!r}, stderr={err!r}, stock={read_stock(stockfile)}"
+            )
     assert read_stock(stockfile) == (2, 0, 190), "held operations lost updates"
 
     commands = [cpp, dotnet] * 16
