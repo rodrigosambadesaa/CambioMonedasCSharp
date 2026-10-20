@@ -380,9 +380,18 @@ internal static class Program
         {
             string monedas = Path.Combine(dir.FullName, "monedas.txt");
             string stock = Path.Combine(dir.FullName, "stock.txt");
-            if (File.Exists(monedas) && File.Exists(stock))
+            if (File.Exists(monedas))
             {
-                return dir.FullName;
+                // A Win32 atomic replace may briefly make stock.txt appear
+                // absent/inaccessible to File.Exists. Retry only this initial
+                // discovery, not a monetary transaction. The repository also
+                // retries its actual file open after selecting this directory.
+                int attempts = OperatingSystem.IsWindows() ? 200 : 1;
+                for (int i = 0; i < attempts; i++)
+                {
+                    if (File.Exists(stock)) return dir.FullName;
+                    if (i + 1 < attempts) Thread.Sleep(10);
+                }
             }
 
             dir = dir.Parent;
