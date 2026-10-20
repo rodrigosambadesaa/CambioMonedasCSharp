@@ -17,9 +17,10 @@ internal static class Program
         if (commandResult.HasValue) return commandResult.Value;
 
         CurrencyRepository repo = new(dataRoot);
+        PortableServices services = new(dataRoot);
         while (true)
         {
-            int mode = AskMode();
+            int mode = AskMode(services);
             if (mode == 0)
             {
                 break;
@@ -58,7 +59,7 @@ internal static class Program
                 continue;
             }
 
-            CurrencyData? currency = repo.LoadCurrency(command);
+            CurrencyData? currency = repo.LoadCurrency(PortableServices.MapCurrency(command));
             if (currency is null)
             {
                 Console.WriteLine("No se pudo cargar moneda/stock para esa clave.");
@@ -67,7 +68,7 @@ internal static class Program
 
             if (mode == 'c')
             {
-                if (!RunAdmin(repo, currency, command))
+                if (!RunAdmin(repo, currency, PortableServices.MapCurrency(command)))
                 {
                     return false;
                 }
@@ -75,7 +76,7 @@ internal static class Program
                 continue;
             }
 
-            if (!RunChange(repo, currency, command, mode == 'b'))
+            if (!RunChange(repo, currency, PortableServices.MapCurrency(command), mode == 'b'))
             {
                 return false;
             }
@@ -219,7 +220,104 @@ internal static class Program
         }
     }
 
-    private static int AskMode()
+    private static string ReadValue(string message)
+    {
+        Console.Write(message);
+        return Console.ReadLine()?.Trim()
+            ?? throw new EndOfStreamException("Se terminó la entrada.");
+    }
+
+    private static BigInteger[] ReadCoinCounts(string raw, int n)
+    {
+        string[] tokens = raw.Split(',');
+        if (tokens.Length != n)
+            throw new ArgumentException($"Se requieren exactamente {n} cantidades.");
+        BigInteger[] values = new BigInteger[n];
+        for (int i = 0; i < n; ++i)
+            if (!BigInteger.TryParse(tokens[i], NumberStyles.None,
+                CultureInfo.InvariantCulture, out values[i]) || values[i] < 0)
+                throw new ArgumentException($"Cantidad incorrecta en posición {i + 1}.");
+        return values;
+    }
+
+    private static bool ExecuteMenuCommand(PortableServices services, string command)
+    {
+        switch (command)
+        {
+            case "historial":
+            case "history":
+                Console.WriteLine("--- HISTORIAL DE TRANSACCIONES ---");
+                var history = services.History(30);
+                if (history.Count == 0) Console.WriteLine("No hay transacciones registradas.");
+                foreach (string entry in history) Console.WriteLine(entry);
+                return true;
+            case "resumen":
+            case "summary":
+                Console.WriteLine(services.CurrencySummary(ReadValue("Moneda: ")));
+                return true;
+            case "snapshot":
+                services.Snapshot(ReadValue("Ruta para la copia de stock: "));
+                Console.WriteLine("Copia de stock completada.");
+                return true;
+            case "restaurar":
+            case "restore":
+                services.Restore(ReadValue("Ruta del snapshot de stock: "));
+                Console.WriteLine("Inventario restaurado.");
+                return true;
+            case "reporte":
+            case "report":
+                services.ExportReport(ReadValue("Ruta del reporte: "));
+                Console.WriteLine("Reporte generado.");
+                return true;
+            case "json":
+                services.ExportJson(ReadValue("Ruta del JSON: "));
+                Console.WriteLine("Inventario exportado a JSON.");
+                return true;
+            case "x":
+            case "convertir":
+            case "convert":
+                string from = ReadValue("Moneda de origen: ");
+                string to = ReadValue("Moneda de destino: ");
+                string raw = ReadValue("Importe en céntimos: ");
+                if (!BigInteger.TryParse(raw, NumberStyles.None,
+                    CultureInfo.InvariantCulture, out BigInteger amount) || amount < 0)
+                    throw new ArgumentException("El importe no es válido.");
+                decimal rate = ExchangeRates.GetRateAsync(from, to,
+                    Environment.CurrentDirectory).GetAwaiter().GetResult();
+                BigInteger converted = ExchangeRates.ConvertCents(amount, rate);
+                string target = PortableServices.MapCurrency(to);
+                CurrencyData data = services.Repository.LoadCurrency(target)
+                    ?? throw new ArgumentException("La moneda de destino no existe.");
+                var solution = EnhancedChangeEngine.Compute(converted, data.Denominations);
+                if (solution is null)
+                    throw new InvalidOperationException("El importe de destino no admite desglose exacto.");
+                Console.WriteLine($"Conversión aplicada: {amount} -> {converted} céntimos; tasa={rate}");
+                for (int i = 0; i < solution.Counts.Length; ++i)
+                    Console.WriteLine($"{data.Denominations[i]}: {solution.Counts[i]}");
+                return true;
+            case "caja":
+            case "specific":
+                string key = PortableServices.MapCurrency(ReadValue("Moneda de caja: "));
+                CurrencyData current = services.Repository.LoadCurrency(key)
+                    ?? throw new ArgumentException("Moneda desconocida.");
+                Console.WriteLine("Denominaciones: " + string.Join(", ", current.Denominations));
+                BigInteger[] incoming = ReadCoinCounts(
+                    ReadValue("Cantidades recibidas, separadas por comas: "), current.Denominations.Count);
+                BigInteger[] outgoing = ReadCoinCounts(
+                    ReadValue("Cantidades entregadas, separadas por comas: "), current.Denominations.Count);
+                bool useStock = ReadValue("¿Actualizar stock? (s/n): ").ToLowerInvariant() is "s" or "si" or "sí" or "y" or "yes";
+                SpecificExchange.Result? exchange = SpecificExchange.Execute(
+                    services.Repository, key, incoming, outgoing, useStock);
+                if (exchange is null)
+                    throw new InvalidOperationException("Cambio rechazado por importe desigual o stock insuficiente.");
+                Console.WriteLine($"Cambio específico correcto. Valor={exchange.TotalCents} céntimos.");
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static int AskMode(PortableServices services)
     {
         while (true)
         {
@@ -230,21 +328,29 @@ internal static class Program
             Console.WriteLine("|   a) Monedas infinitas                            |");
             Console.WriteLine("|   b) Monedas limitadas (usa stock)                |");
             Console.WriteLine("|   c) Administrador de stock                       |");
+            Console.WriteLine("|   x) Conversión de monedas                        |");
+            Console.WriteLine("|   caja, historial, resumen, snapshot, restaurar   |");
+            Console.WriteLine("|   reporte, json (también en inglés)               |");
             Console.WriteLine("+--------------------------------------------------+");
             Console.Write("Opcion (o 'salir'): ");
-            string input = TextKey.Normalize((Console.ReadLine() ?? string.Empty).Trim());
+            string? line = Console.ReadLine();
+            if (line is null) return 0;
+            string input = TextKey.Normalize(line.Trim());
+            if (input is "salir" or "exit" or "quit") return 0;
+            if (input is "a" or "b" or "c") return input[0];
 
-            if (input == "salir")
+            try
             {
-                return 0;
+                if (ExecuteMenuCommand(services, input)) continue;
             }
-
-            if (input.Length > 0 && (input[0] == 'a' || input[0] == 'b' || input[0] == 'c'))
+            catch (Exception error) when (error is IOException or ArgumentException
+                or InvalidDataException or InvalidOperationException or
+                NotSupportedException or UnauthorizedAccessException or HttpRequestException)
             {
-                return input[0];
+                Console.WriteLine("Operación no completada: " + error.Message);
+                continue;
             }
-
-            Console.WriteLine("Opcion no valida.");
+            Console.WriteLine("Opción no válida.");
         }
     }
 

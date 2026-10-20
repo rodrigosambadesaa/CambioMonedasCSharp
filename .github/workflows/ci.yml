@@ -103,6 +103,34 @@ jobs:
           "@ | dotnet run --project ProgVorazCs.Console --configuration Release --no-build | Out-String
           Move-Item stock.bak stock.txt -Force
 
+      - name: Interactive utilities smoke (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          printf "resumen\neuro\nhistorial\nconvertir\nEUR\nEUR\n127\nsalir\n" |
+            dotnet run --project ProgVorazCs.Console --configuration Release --no-build > interactive.out
+          grep -q 'Moneda=euro' interactive.out
+          grep -q 'HISTORIAL DE TRANSACCIONES' interactive.out
+          grep -q 'Conversión aplicada:' interactive.out
+
+      - name: Interactive utilities smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $output = @"
+          resumen
+          euro
+          historial
+          convertir
+          EUR
+          EUR
+          127
+          salir
+          "@ | dotnet run --project ProgVorazCs.Console --configuration Release --no-build | Out-String
+          if ($output -notmatch 'Moneda=euro' -or $output -notmatch 'HISTORIAL DE TRANSACCIONES' -or
+              $output -notmatch 'Conversión aplicada:') {
+              throw 'Interactive utilities smoke failure'
+          }
+
       - name: Smoke launch GUI (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
