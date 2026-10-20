@@ -130,18 +130,34 @@ public sealed class CurrencyRepository
 
     private static List<string> ReadTokens(string path)
     {
-        if (!File.Exists(path))
+        // Replacing stock.txt is atomic, but Windows may deny an unrelated
+        // read-open for a few milliseconds if the replace is underway.
+        // Read all lines and close the handle before returning any tokens.
+        string[] lines = [];
+        bool obtained = false;
+        for (int attempt = 0; attempt < 200; attempt++)
         {
-            return [];
+            try
+            {
+                lines = File.ReadAllLines(path);
+                obtained = true;
+                break;
+            }
+            catch (FileNotFoundException) when (OperatingSystem.IsWindows() &&
+                attempt < 199)
+            {
+                Thread.Sleep(10);
+            }
+            catch (IOException ex) when (OperatingSystem.IsWindows() &&
+                attempt < 199 && (ex.HResult & 0xFFFF) is 5 or 32 or 33)
+            {
+                Thread.Sleep(10);
+            }
         }
-
+        if (!obtained) return [];
         List<string> tokens = [];
-        foreach (string line in File.ReadLines(path))
-        {
-            string[] parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            tokens.AddRange(parts);
-        }
-
+        foreach (string line in lines)
+            tokens.AddRange(line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return tokens;
     }
 
