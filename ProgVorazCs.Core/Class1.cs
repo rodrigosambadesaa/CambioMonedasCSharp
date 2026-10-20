@@ -153,6 +153,14 @@ public sealed class CurrencyRepository
             {
                 Thread.Sleep(10);
             }
+            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() &&
+                attempt < 199)
+            {
+                // Win32 replacement can manifest as UnauthorizedAccessException
+                // rather than IOException while a writer swaps stock.txt.
+                // Retry the read only; never replay a completed transaction.
+                Thread.Sleep(10);
+            }
         }
         if (!obtained) return [];
         List<string> tokens = [];
