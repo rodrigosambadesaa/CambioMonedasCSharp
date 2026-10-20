@@ -10,27 +10,39 @@ permissions:
 
 jobs:
   real-cross-language-stock:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - name: Checkout native C# implementation
+      - name: Checkout C# code
         uses: actions/checkout@v5
-      - name: Checkout pinned independent C++ implementation
+      - name: Checkout pinned independent C++ code
         uses: actions/checkout@v5
         with:
           repository: rodrigosambadesaa/CambioMonedasCpp
           ref: 78ac82597f2dcb27bb1d443851b1f38cd67560fd
           path: .ci/cpp
-      - name: Set up .NET 10
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - name: Compile native C++20 implementation
+      - name: Compile C++ on Linux/macOS
+        if: runner.os != 'Windows'
         run: make -C .ci/cpp release
-      - name: Compile C# implementation
+      - name: Compile C++ on Windows
+        if: runner.os == 'Windows'
+        working-directory: .ci/cpp
+        shell: pwsh
+        run: g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic main.cpp portable_cli.cpp moneda_gestion.cpp bigint.cpp vector_dinamico.cpp algoritmo_cambio.cpp -o progvoraz.exe -lws2_32
+      - name: Compile C#
         run: dotnet build ProgVorazCs.Console/ProgVorazCs.Console.csproj --configuration Release
-      - name: Test simultaneous native flock + Win-agnostic inventory semantics on Linux
-        run: |
-          python3 tests/test_shared_stock_interop.py \
-            .ci/cpp/progvoraz \
-            ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll
+      - name: Exercise actual flock protocol on Linux/macOS
+        if: runner.os != 'Windows'
+        run: python3 tests/test_shared_stock_interop.py .ci/cpp/progvoraz ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll
+      - name: Exercise actual exclusive-share protocol on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python tests/test_shared_stock_interop.py .ci/cpp/progvoraz.exe ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll
