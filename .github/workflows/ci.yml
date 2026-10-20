@@ -142,6 +142,31 @@ jobs:
           Get-Process ProgVorazCs.Gui -ErrorAction SilentlyContinue |
             Stop-Process -ErrorAction SilentlyContinue
 
+      - name: JSON result compatibility (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          printf "a\neuro\n127\nsalir\n" |
+            dotnet run --project ProgVorazCs.Console --configuration Release --no-build -- --json > result.jsonlog
+          grep -q '"resultado":' result.jsonlog
+          grep -q '"denominacion":' result.jsonlog
+          grep -q '"cantidad":' result.jsonlog
+
+      - name: JSON result compatibility (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $output = @"
+          a
+          euro
+          127
+          salir
+          "@ | dotnet run --project ProgVorazCs.Console --configuration Release --no-build -- --json | Out-String
+          if ($output -notmatch '"resultado":' -or
+              $output -notmatch '"denominacion":' -or
+              $output -notmatch '"cantidad":') {
+              throw '--json result format incompatible'
+          }
+
       - name: Smoke launch GUI (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
