@@ -229,3 +229,14 @@ El proyecto SDK de .NET incluye app_console.cs automáticamente, sin enlaces
 al programa original en C. La extracción conserva el comportamiento existente.
 No supone que toda la lógica restante de app_console.c esté ya portada; esa
 equivalencia se comprueba separadamente con tests y nuevos módulos.
+
+## Cambio cercano y restricciones en app_console.cs
+
+La consola interactiva acepta **limite** (también `limit` y `l`) al pedir
+cantidad. Solicita una restricción **N**, **=N** o **N-M** y calcula
+el cambio correspondiente con el motor exacto BigInteger. También acepta
+**cercano**/`nearest` sin restricción. Si no hay cambio exacto, informa
+de la mayor cantidad cubierta posible y solicita confirmación antes de
+descontar inventario. Rechazar la propuesta no modifica el stock.
+Los límites de exploración siguen siendo explícitos para evitar consumos
+descontrolados de recursos. Actions prueba el flujo =3 con 6 céntimos.
