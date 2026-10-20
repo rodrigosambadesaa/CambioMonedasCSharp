@@ -167,3 +167,13 @@ antes de mostrar resultados; un error de stock no confirma la operación.
 Las exportaciones y la restauración trabajan sobre las rutas indicadas
 por el usuario. Al recibir EOF, la consola finaliza en lugar de
 repetir indefinidamente el menú.
+
+
+## Lanzamiento de la GUI desde consola
+
+\`dotnet run --project ProgVorazCs.Console -- --gui\` abre la aplicación
+WinForms en Windows usando \`ProcessStartInfo\`, sin ejecutar shell ni
+el binario original en C. Busca la GUI empaquetada junto a la consola o
+compilada en el proyecto WinForms, con ruta absoluta y directorio de trabajo
+explícito. En Linux y macOS devuelve un error explicativo: no se presenta
+WinForms como una GUI multiplataforma.
