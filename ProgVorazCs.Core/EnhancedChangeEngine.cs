@@ -34,7 +34,27 @@ public static class EnhancedChangeEngine
         // monedas canonicas; nunca se fabrica un resultado si hay resto.
         const int maxDynamicAmount = 200_000;
         if (amount > maxDynamicAmount)
+        {
+            // Shortest paths over residues are EXACT for unlimited stock once the
+            // minimal-penalty representative fits within the requested amount.
+            // This matters for non-canonical systems where greedy is suboptimal.
+            if (stock is null)
+            {
+                Answer? certified = ResidueOptimalLarge(amount, denominations);
+                if (certified is not null)
+                {
+                    if (certified.TotalCoins >= minCoins &&
+                        (!maxCoins.HasValue || certified.TotalCoins <= maxCoins))
+                        return certified;
+                    if (certified.TotalCoins > (maxCoins ?? int.MaxValue))
+                        return null; // Even the global optimum exceeds the maximum.
+                    if (minCoins > certified.TotalCoins)
+                        throw new NotSupportedException(
+                            "El mínimo de piezas requiere una búsqueda adicional de soluciones subóptimas.");
+                }
+            }
             return GreedyLarge(amount, denominations, stock, minCoins, maxCoins);
+        }
 
         int target = (int)amount;
         int[] values = new int[denominations.Count];
@@ -145,6 +165,69 @@ public static class EnhancedChangeEngine
             while (covered > 0 && minimum[covered] == inf) --covered;
         if (minimum[covered] == inf || nearest && covered == 0) return null;
         return new Answer(covered, Extract(plans[covered], values.Length));
+    }
+
+    /// <summary>
+    /// Exact unlimited-change solver for very large amounts when the maximum
+    /// denomination is at most 50,000 cents. For each residue modulo the
+    /// largest coin, Dijkstra minimizes (largest-denomination * coin count - sum).
+    /// Filling the residual amount with largest coins then minimizes coin count.
+    /// The representative's sum must fit within the requested amount; otherwise
+    /// the result is not certified and we let the caller use its fallback.
+    /// </summary>
+    private static Answer? ResidueOptimalLarge(BigInteger amount,
+        IReadOnlyList<BigInteger> denominations)
+    {
+        BigInteger max = denominations.Max();
+        if (max <= 1 || max > 50_000) return null;
+        int modulus = (int)max;
+        var penalty = Enumerable.Repeat(long.MaxValue, modulus).ToArray();
+        var smallestBase = Enumerable.Repeat(long.MaxValue, modulus).ToArray();
+        var predecessor = Enumerable.Repeat(-1, modulus).ToArray();
+        var chosenCoin = Enumerable.Repeat(-1, modulus).ToArray();
+        var queue = new PriorityQueue<int, (long Penalty, long Amount)>();
+        penalty[0] = smallestBase[0] = 0;
+        queue.Enqueue(0, (0, 0));
+        while (queue.TryDequeue(out int residue, out var cost))
+        {
+            if (cost.Penalty != penalty[residue] || cost.Amount != smallestBase[residue])
+                continue;
+            for (int i = 0; i < denominations.Count; i++)
+            {
+                BigInteger denomination = denominations[i];
+                if (denomination >= max) continue; // max is filled at the end.
+                int coin = (int)denomination;
+                int next = (residue + coin) % modulus;
+                long nextPenalty = cost.Penalty + modulus - coin;
+                long nextAmount = cost.Amount + coin;
+                if (nextPenalty > penalty[next] ||
+                    nextPenalty == penalty[next] && nextAmount >= smallestBase[next])
+                    continue;
+                penalty[next] = nextPenalty;
+                smallestBase[next] = nextAmount;
+                predecessor[next] = residue;
+                chosenCoin[next] = i;
+                queue.Enqueue(next, (nextPenalty, nextAmount));
+            }
+        }
+        int targetResidue = (int)(amount % modulus);
+        if (penalty[targetResidue] == long.MaxValue ||
+            smallestBase[targetResidue] > amount)
+            return null;
+        BigInteger[] counts = new BigInteger[denominations.Count];
+        int firstLargest = Enumerable.Range(0, denominations.Count)
+            .First(i => denominations[i] == max);
+        counts[firstLargest] = (amount - smallestBase[targetResidue]) / max;
+        int current = targetResidue;
+        for (int steps = 0; current != 0 && steps < modulus; steps++)
+        {
+            int i = chosenCoin[current];
+            if (i < 0) return null;
+            counts[i]++;
+            current = predecessor[current];
+        }
+        if (current != 0) return null;
+        return new Answer(amount, counts);
     }
 
     private static Answer? GreedyLarge(BigInteger amount, IReadOnlyList<BigInteger> denominations,
