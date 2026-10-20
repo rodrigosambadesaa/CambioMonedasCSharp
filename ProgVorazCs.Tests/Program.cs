@@ -126,6 +126,28 @@ Check(hugeTwo is not null && hugeTwo.Covered == 200_006 &&
     "two-denomination Diophantine amount");
 Check(hugeTwo!.Counts[0] == 28_570 && hugeTwo.Counts[1] == 4,
     "two-denomination optimum, 28570 * 7 + 4 * 4");
+// A greedy large-amount solver uses one 800000 coin and fails to make
+// up the missing 600000, even though 700000 + 700000 is available.
+var sparseLimited = EnhancedChangeEngine.Compute(1_400_000,
+    [new BigInteger(800_000),new BigInteger(700_000),new BigInteger(100_000)],
+    [BigInteger.One,new BigInteger(2),BigInteger.Zero]);
+Check(sparseLimited?.Counts.SequenceEqual(
+    [BigInteger.Zero,new BigInteger(2),BigInteger.Zero]) == true,
+    "sparse exact stock solver must find feasible change missed by greedy");
+var sparseNearest = EnhancedChangeEngine.Compute(1_600_000,
+    [new BigInteger(800_000),new BigInteger(700_000),new BigInteger(100_000)],
+    [BigInteger.One,BigInteger.One,BigInteger.Zero], nearest: true);
+Check(sparseNearest?.Covered == 1_500_000 && sparseNearest.TotalCoins == 2,
+    "sparse exact closest change");
+var sparseRange = EnhancedChangeEngine.Compute(1_200_000,
+    [new BigInteger(800_000),new BigInteger(400_000),new BigInteger(200_000)],
+    [BigInteger.One,new BigInteger(3),new BigInteger(2)], minCoins: 3, maxCoins: 3);
+Check(sparseRange?.TotalCoins == 3, "sparse exact non-minimal bounded coin count");
+var sparseImpossible = EnhancedChangeEngine.Compute(1_700_000,
+    [new BigInteger(800_000),new BigInteger(700_000),new BigInteger(100_000)],
+    [BigInteger.One,BigInteger.One,BigInteger.Zero]);
+Check(sparseImpossible is null, "sparse exact no-solution certificate");
+
 var stockTwo = EnhancedChangeEngine.Compute(
     200_006, [new BigInteger(7), new BigInteger(4)],
     [new BigInteger(28_566), new BigInteger(100)]);

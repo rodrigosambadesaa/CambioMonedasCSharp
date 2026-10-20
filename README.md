@@ -197,3 +197,7 @@ El motor usa Dijkstra sobre los residuos del valor de la mayor denominación (ha
 ## Solución exacta con dos denominaciones, incluso con stock
 
 Para cantidades superiores a 200.000 céntimos y dos denominaciones diferentes, el motor aplica Euclides extendido y aritmética diofántica `a·x + b·y = importe`. Calcula la solución con menos monedas y respeta las disponibilidades de inventario, los mínimos y máximos de piezas sin reservar memoria proporcional al importe. Se comprueban cantidades BigInteger astronómicas y casos sin solución.
+
+## Inventarios finitos con importes grandes
+
+Si el inventario tiene hasta 512 piezas y el importe supera 200.000 céntimos, el motor usa una búsqueda exacta dispersa con agrupación binaria, conservando importe y número de piezas por estado. Soporta stock, mínimo/máximo y cambio cercano. Cuando la exploración supera 250.000 estados, se notifica que el cálculo excede el límite de recursos en vez de fabricar un resultado voraz. Pruebas adicionales cubren casos donde el voraz falla aunque exista solución.

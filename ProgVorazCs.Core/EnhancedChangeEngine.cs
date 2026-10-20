@@ -35,6 +35,12 @@ public static class EnhancedChangeEngine
         const int maxDynamicAmount = 200_000;
         if (amount > maxDynamicAmount)
         {
+            // Exact sparse knapsack for finite inventories, independent
+            // of the numeric size of amount or coin denominations.
+            if (stock is not null && TrySparseLimitedLarge(amount, denominations,
+                stock, minCoins, maxCoins, nearest, out Answer? sparse))
+                return sparse;
+
             if (denominations.Count == 2 && denominations[0] != denominations[1])
                 return SolveTwoDenominations(amount, denominations, stock, minCoins, maxCoins);
 
@@ -240,6 +246,71 @@ public static class EnhancedChangeEngine
     /// of pieces. Constraints on minimum/maximum pieces are applied using
     /// closed-form moves across the Diophantine solution lattice.
     /// </summary>
+    /// <summary>
+    /// Exact bounded subset-sum with binary-split inventory items. States
+    /// retain both value and number of pieces, preserving non-minimal solutions
+    /// needed for an explicit lower coin bound. Only attempted for at most 512
+    /// physical coins. State explosion fails explicitly rather than silently
+    /// treating a heuristic as mathematically optimal.
+    /// </summary>
+    private static bool TrySparseLimitedLarge(BigInteger amount,
+        IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger> stock,
+        int minCoins, int? maxCoins, bool nearest, out Answer? answer)
+    {
+        answer = null;
+        BigInteger totalStock = stock.Aggregate(BigInteger.Zero, (a,b) => a+b);
+        if (totalStock > 512) return false;
+        var states = new Dictionary<(BigInteger Sum, int Coins), Node?>
+        {
+            [(BigInteger.Zero, 0)] = null
+        };
+        for (int i = 0; i < denominations.Count; i++)
+        {
+            int remaining = (int)stock[i];
+            for (int chunk = 1; remaining > 0;)
+            {
+                int taken = Math.Min(chunk, remaining);
+                remaining -= taken;
+                BigInteger value = denominations[i] * taken;
+                var next = new Dictionary<(BigInteger Sum, int Coins), Node?>(states);
+                foreach (var (key, previous) in states)
+                {
+                    BigInteger candidateAmount = key.Sum + value;
+                    int candidateCoins = key.Coins + taken;
+                    if (candidateAmount > amount ||
+                        maxCoins.HasValue && candidateCoins > maxCoins.Value)
+                        continue;
+                    next.TryAdd((candidateAmount, candidateCoins),
+                        new Node(previous, i, taken));
+                }
+                if (next.Count > 250_000)
+                    throw new NotSupportedException(
+                        "La búsqueda exacta superó 250.000 estados de inventario.");
+                states = next;
+                chunk = chunk > remaining / 2 ? remaining : chunk * 2;
+            }
+        }
+        BigInteger bestCovered = -1;
+        int bestCoins = int.MaxValue;
+        Node? bestPlan = null;
+        foreach (var (key, plan) in states)
+        {
+            if (key.Coins < minCoins || maxCoins.HasValue && key.Coins > maxCoins.Value
+                || nearest && key.Sum == 0
+                || !nearest && key.Sum != amount)
+                continue;
+            if (key.Sum > bestCovered || key.Sum == bestCovered && key.Coins < bestCoins)
+            {
+                bestCovered = key.Sum;
+                bestCoins = key.Coins;
+                bestPlan = plan;
+            }
+        }
+        if (bestCovered >= 0)
+            answer = new Answer(bestCovered, Extract(bestPlan, denominations.Count));
+        return true;
+    }
+
     private static Answer? SolveTwoDenominations(BigInteger amount,
         IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger>? stock,
         int minCoins, int? maxCoins)
