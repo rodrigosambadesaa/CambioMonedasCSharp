@@ -41,6 +41,7 @@ internal static class AppConsole
     {
         while (true)
         {
+            ShowAvailableCurrencies(repo);
             Console.Write("Nombre de la moneda (ej: euro, dolar, yen), 'modo', 'volver' o 'salir': ");
             string input = (Console.ReadLine() ?? string.Empty).Trim();
             string command = TextKey.Normalize(input);
@@ -82,6 +83,22 @@ internal static class AppConsole
                 return false;
             }
         }
+    }
+
+    // The C reference lists all available currencies when entering a mode.
+    // Read the actual repository file; no hard-coded list of nine keys.
+    private static void ShowAvailableCurrencies(CurrencyRepository repository)
+    {
+        Console.WriteLine("--- Divisas disponibles ---");
+        foreach (string name in repository.LoadCurrencyNames())
+        {
+            CurrencyData? currency = repository.LoadCurrency(name);
+            if (currency is null || currency.Denominations.Count == 0)
+                continue;
+            Console.WriteLine($"  {currency.Name}: " +
+                $"{currency.Denominations.Count} denominaciones");
+        }
+        Console.WriteLine("---------------------------");
     }
 
     private static bool RunChange(CurrencyRepository repo, CurrencyData currency, string currencyKey, bool limited)

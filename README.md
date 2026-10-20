@@ -240,3 +240,7 @@ de la mayor cantidad cubierta posible y solicita confirmación antes de
 descontar inventario. Rechazar la propuesta no modifica el stock.
 Los límites de exploración siguen siendo explícitos para evitar consumos
 descontrolados de recursos. Actions prueba el flujo =3 con 6 céntimos.
+
+## Descubrimiento de monedas disponibles
+
+La consola interactiva de C# enumera dinámicamente las monedas reales presentes en `monedas.txt` al entrar en un modo, siguiendo la funcionalidad `mostrar_monedas_disponibles` del archivo `app_console.c` original. La lista no está codificada a mano ni presupone exactamente nueve monedas. Se omiten entradas cuyo inventario/denominaciones sean inconsistentes y se comprueba el resultado en CI.

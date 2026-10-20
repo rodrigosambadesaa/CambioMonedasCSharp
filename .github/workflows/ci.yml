@@ -73,6 +73,14 @@ jobs:
               throw 'Interactive coin-limit test failed'
           }
 
+      - name: Verify discovered currency list (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          printf 'a\nsalir\n' | \
+            dotnet run --project ProgVorazCs.Console --configuration Release --no-build > currencies.out
+          grep -q 'Divisas disponibles' currencies.out
+          grep -q 'euro:' currencies.out
+
       - name: Smoke consola modo a (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
