@@ -131,6 +131,17 @@ jobs:
               throw 'Interactive utilities smoke failure'
           }
 
+      - name: Verify --gui native launcher (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $output = dotnet run --project ProgVorazCs.Console --configuration Release --no-build -- --gui | Out-String
+          if ($LASTEXITCODE -ne 0 -or $output -notmatch 'Interfaz WinForms iniciada') {
+            throw 'Native --gui launcher failed'
+          }
+          Get-Process ProgVorazCs.Gui -ErrorAction SilentlyContinue |
+            Stop-Process -ErrorAction SilentlyContinue
+
       - name: Smoke launch GUI (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

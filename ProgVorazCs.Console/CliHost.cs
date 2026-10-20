@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Numerics;
 using ProgVorazCs.Core;
 
@@ -28,7 +30,7 @@ public static class CliHost
                 System.Console.WriteLine("--snapshot-stock FILE --restore-stock FILE --convert FROM TO CENTS [--convert-stock]");
                 System.Console.WriteLine("--specific CURRENCY RECEIVED_CSV RETURNED_CSV [--specific-stock]");
                 System.Console.WriteLine("--history [--tail N] --summary CURRENCY");
-                System.Console.WriteLine("--server [--port N] (solo 127.0.0.1) --version --help");
+                System.Console.WriteLine("--gui (Windows) --server [--port N] (solo 127.0.0.1) --version --help");
                 return 0;
             }
             if (args.Contains("--version") || args.Contains("-v"))
@@ -36,6 +38,7 @@ public static class CliHost
                 System.Console.WriteLine("ProgVoraz C# (migracion .NET 10)");
                 return 0;
             }
+            if (args.Contains("--gui") || args.Contains("gui")) return LaunchGui(dataRoot);
             PortableServices services = new(dataRoot);
             if (args.Contains("--history"))
             {
@@ -132,11 +135,41 @@ public static class CliHost
             throw new ArgumentException("Opcion no reconocida. Use --help.");
         }
         catch (Exception error) when (error is IOException or ArgumentException or InvalidDataException
-            or InvalidOperationException or NotSupportedException or UnauthorizedAccessException or System.Text.Json.JsonException or HttpRequestException)
+            or InvalidOperationException or NotSupportedException or UnauthorizedAccessException or System.Text.Json.JsonException or HttpRequestException or Win32Exception)
         {
             System.Console.Error.WriteLine(error.Message);
             return 2;
         }
+    }
+
+    private static int LaunchGui(string dataRoot)
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new NotSupportedException("La GUI WinForms sólo se ejecuta en Windows.");
+
+        string project = Path.Combine(dataRoot, "ProgVorazCs.Gui");
+        // An installed release places the GUI beside the console executable.
+        // Development builds place it under the WinForms project.
+        string[] candidates =
+        [
+            Path.Combine(AppContext.BaseDirectory, "ProgVorazCs.Gui.exe"),
+            Path.Combine(project, "bin", "Release", "net10.0-windows", "ProgVorazCs.Gui.exe"),
+            Path.Combine(project, "bin", "Debug", "net10.0-windows", "ProgVorazCs.Gui.exe")
+        ];
+        string? executable = candidates.FirstOrDefault(File.Exists);
+        if (executable is null)
+            throw new FileNotFoundException("Compile la GUI WinForms antes de usar --gui.");
+
+        using Process? launched = Process.Start(new ProcessStartInfo
+        {
+            FileName = executable,
+            WorkingDirectory = dataRoot,
+            UseShellExecute = true
+        });
+        if (launched is null)
+            throw new InvalidOperationException("No se pudo iniciar la GUI.");
+        System.Console.WriteLine("Interfaz WinForms iniciada.");
+        return 0;
     }
 
     private static BigInteger[] ParseCounts(string input, int required)
