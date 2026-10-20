@@ -185,6 +185,33 @@ internal static class StockLedger
         }, out updated);
     }
 
+    private static void ReplaceAtomically(string source, string destination)
+    {
+        // On Windows an unrelated reader may briefly hold the existing stock
+        // file without FILE_SHARE_DELETE. Retrying only the final atomic
+        // replace is safe: the transaction still owns stock.txt.lock and has
+        // not released or recomputed its read-modify-write state.
+        for (int attempt = 0; attempt < 200; attempt++)
+        {
+            try
+            {
+                File.Replace(source, destination, null);
+                return;
+            }
+            catch (IOException ex) when (OperatingSystem.IsWindows() &&
+                attempt < 199 && (ex.HResult & 0xFFFF) is 5 or 32 or 33)
+            {
+                Thread.Sleep(10);
+            }
+            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() &&
+                attempt < 199)
+            {
+                Thread.Sleep(10);
+            }
+        }
+        throw new IOException("No se pudo reemplazar el stock de forma atómica.");
+    }
+
     private static bool Apply(string path, string currency, int expected,
         Func<BigInteger[], BigInteger[]?> transform, out List<BigInteger> final)
     {
@@ -224,7 +251,7 @@ internal static class StockLedger
                 ".stock-" + Guid.NewGuid().ToString("N") + ".tmp");
             File.WriteAllLines(staging, lines, new UTF8Encoding(false));
             // File.Replace conserva el original si falla la escritura previa.
-            File.Replace(staging, path, null);
+            ReplaceAtomically(staging, path);
             staging = null;
             final = newValues.ToList();
             // Igual que el C original: el historial es informativo y su fallo
