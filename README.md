@@ -177,3 +177,15 @@ el binario original en C. Busca la GUI empaquetada junto a la consola o
 compilada en el proyecto WinForms, con ruta absoluta y directorio de trabajo
 explícito. En Linux y macOS devuelve un error explicativo: no se presenta
 WinForms como una GUI multiplataforma.
+
+
+## Resultados JSON interactivos
+
+\`--json\` o la variable \`PROGVORAZ_JSON=1\` reimplementan el renderizado
+del C original para las operaciones de cambio en consola. El objeto
+\`resultado\` contiene \`denominacion\` y \`cantidad\` como cadenas
+decimales (sin pérdida de precisión), además de \`stock\` cuando se
+consume inventario. Este modo conserva los menús de texto; los clientes
+que precisen exclusivamente JSON deben extraer la línea JSON o usar
+la exportación JSON dedicada. Actions verifica el formato en
+Linux, macOS y Windows.

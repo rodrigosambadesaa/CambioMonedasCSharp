@@ -12,6 +12,12 @@ public static class CliHost
     public static int? TryRun(string[] args, string dataRoot)
     {
         if (args.Length == 0) return null;
+        // In C, --json enables a result renderer and then enters the TUI.
+        if (args.Contains("--json"))
+        {
+            Environment.SetEnvironmentVariable("PROGVORAZ_JSON", "1");
+            if (args.Length == 1) return null;
+        }
         bool english = args.Contains("--lang") && ValueAfter(args, "--lang") == "en"
             || Environment.GetEnvironmentVariable("PROGVORAZ_LANG") == "en";
         string? input = ValueAfter(args, "--input");
@@ -26,7 +32,7 @@ public static class CliHost
             if (args.Contains("--help") || args.Contains("-h"))
             {
                 System.Console.WriteLine("ProgVoraz C# --input CSV [--output CSV] [--log LOG] | --stream | --docker");
-                System.Console.WriteLine("--lang es|en --json --export-stock-json FILE --export-report FILE");
+                System.Console.WriteLine("--lang es|en --json (modo interactivo) --export-stock-json FILE --export-report FILE");
                 System.Console.WriteLine("--snapshot-stock FILE --restore-stock FILE --convert FROM TO CENTS [--convert-stock]");
                 System.Console.WriteLine("--specific CURRENCY RECEIVED_CSV RETURNED_CSV [--specific-stock]");
                 System.Console.WriteLine("--history [--tail N] --summary CURRENCY");

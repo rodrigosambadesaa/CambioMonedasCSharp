@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Numerics;
+using System.Text.Json;
 using ProgVorazCs.Core;
 
 internal static class Program
@@ -133,6 +134,24 @@ internal static class Program
             if (!ok)
             {
                 Console.WriteLine("No existe cambio exacto para esa cantidad.");
+                continue;
+            }
+
+            // Compatibilidad con PROGVORAZ_JSON del programa C.
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PROGVORAZ_JSON")))
+            {
+                object[] entries = currency.Denominations.Select((denomination, i) =>
+                    limited
+                        ? (object)new {
+                            denominacion = denomination.ToString(CultureInfo.InvariantCulture),
+                            cantidad = solution[i].ToString(CultureInfo.InvariantCulture),
+                            stock = currency.Stock[i].ToString(CultureInfo.InvariantCulture)
+                        }
+                        : new {
+                            denominacion = denomination.ToString(CultureInfo.InvariantCulture),
+                            cantidad = solution[i].ToString(CultureInfo.InvariantCulture)
+                        }).ToArray();
+                Console.WriteLine(JsonSerializer.Serialize(new { resultado = entries }));
                 continue;
             }
 
