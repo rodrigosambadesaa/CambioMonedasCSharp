@@ -50,6 +50,38 @@ jobs:
         if: runner.os == 'Windows'
         run: dotnet run --project ProgVorazCs.Tests --configuration Release
 
+      - name: Specific selected currency sub-menu (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          printf 'a\neuro\nespecifico\n1,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n1,0,0,0,0,0,0,0,0,0,0,0,0,0,0\nhistorial\nresumen\nsalir\n' |
+            dotnet run --project ProgVorazCs.Console --configuration Release --no-build > specific-selected.log
+          grep -q 'Cambio específico correcto. Valor=50000' specific-selected.log
+          grep -q 'Stock sin cambios' specific-selected.log
+          grep -q 'Moneda=euro' specific-selected.log
+          printf 'a\neuro\nespecifico\n1,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\nsalir\n' |
+            dotnet run --project ProgVorazCs.Console --configuration Release --no-build > specific-rejected.log
+          grep -q 'Cambio específico rechazado' specific-rejected.log
+
+      - name: Specific selected currency sub-menu (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $inputText = @"
+          a
+          euro
+          especifico
+          1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+          1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+          resumen
+          salir
+          "@
+          $result = $inputText | dotnet run --project ProgVorazCs.Console --configuration Release --no-build | Out-String
+          if ($result -notmatch 'Cambio específico correcto. Valor=50000' -or
+              $result -notmatch 'Stock sin cambios' -or
+              $result -notmatch 'Moneda=euro') {
+            throw 'Selected currency specific exchange regression'
+          }
+
       - name: Test limite y cambio cercano interactivo (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
