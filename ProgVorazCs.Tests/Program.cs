@@ -210,7 +210,9 @@ try
     // Dos operaciones simultaneas no deben perder actualizaciones.
     Task<bool>[] concurrent = Enumerable.Range(0, 12).Select(i =>
         Task.Run(() => service.Repository.TryAdjustStock("euro", 0, BigInteger.One, true, out _))).ToArray();
-    Check((await Task.WhenAll(concurrent)).All(x => x), "incrementos concurrentes");
+    bool[] completed = await Task.WhenAll(concurrent);
+    Check(completed.All(x => x), "incrementos concurrentes: rechazados=" +
+        completed.Count(x => !x) + " stock=" + service.Repository.LoadStock("euro")![0]);
     Check(service.Repository.LoadStock("euro")![0] == 16, "sin lost updates");
     Check(!service.Repository.TryConsumeStock("euro", [17,0,0], out _), "sin stock negativo");
     Check(service.Repository.TryConsumeStock("euro", [12,0,0], out var balance),

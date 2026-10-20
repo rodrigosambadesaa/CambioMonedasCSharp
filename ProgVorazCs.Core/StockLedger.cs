@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using System.Runtime.InteropServices;
 
 namespace ProgVorazCs.Core;
 
@@ -11,22 +12,111 @@ namespace ProgVorazCs.Core;
 /// </summary>
 internal static class StockLedger
 {
-    private static FileStream Acquire(string path)
+    // Use *native* open() on Unix: .NET FileStream's FileShare layer may
+    // itself acquire advisory locks while opening, before our retry loop can
+    // call flock. A plain POSIX fd matches the independent C++ implementation.
+    private const int LockExclusive = 2, LockNonBlocking = 4, LockUnlock = 8;
+
+    [DllImport("libc", EntryPoint = "flock", SetLastError = true)]
+    private static extern int Flock(int descriptor, int operation);
+
+    // Darwin arm64 passes C variadic arguments on the stack, while fixed
+    // P/Invoke parameters use registers. Never P/Invoke open(path, flags, mode):
+    // mode can silently become 000, creating an unreadable lock file.
+    [DllImport("libc", EntryPoint = "open", SetLastError = true)]
+    private static extern int OpenExisting(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string pathname, int flags);
+
+    [DllImport("libc", EntryPoint = "creat", SetLastError = true)]
+    private static extern int CreateNative(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string pathname, int mode);
+
+    [DllImport("libc", EntryPoint = "close", SetLastError = true)]
+    private static extern int CloseNative(int descriptor);
+
+    private sealed class StockLease : IDisposable
+    {
+        private FileStream? windowsStream;
+        private int unixDescriptor = -1;
+
+        public StockLease(FileStream stream) { windowsStream = stream; }
+        public StockLease(int descriptor) { unixDescriptor = descriptor; }
+
+        public void Dispose()
+        {
+            if (unixDescriptor >= 0)
+            {
+                int fd = unixDescriptor;
+                unixDescriptor = -1;
+                try { _ = Flock(fd, LockUnlock); }
+                finally { _ = CloseNative(fd); }
+            }
+            windowsStream?.Dispose();
+            windowsStream = null;
+        }
+    }
+
+    private static IDisposable Acquire(string path)
     {
         string lockFile = path + ".lock";
-        for (int attempt = 0; attempt < 200; ++attempt)
+        if (OperatingSystem.IsWindows())
         {
-            try
+            // C++ Windows opens its .lock file with CreateFileA share mode 0.
+            for (int attempt = 0; attempt < 200; ++attempt)
             {
-                return new FileStream(lockFile, FileMode.OpenOrCreate,
-                    FileAccess.ReadWrite, FileShare.None);
+                try
+                {
+                    return new StockLease(new FileStream(lockFile, FileMode.OpenOrCreate,
+                        FileAccess.ReadWrite, FileShare.None));
+                }
+                catch (IOException) when (attempt < 199) { Thread.Sleep(10); }
             }
-            catch (IOException) when (attempt < 199)
+            throw new IOException("No se pudo adquirir el bloqueo Win32 de inventario.");
+        }
+
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            throw new PlatformNotSupportedException("Se requiere POSIX flock o Windows.");
+
+        // open() is invoked with TWO fixed arguments only. creat() has
+        // two fixed arguments and is used only for the initial missing file.
+        int descriptor = OpenExisting(lockFile, 2); // O_RDWR on POSIX.
+        if (descriptor < 0 && Marshal.GetLastPInvokeError() == 2) // ENOENT
+        {
+            int created = CreateNative(lockFile, 0x180); // mode 0600.
+            if (created >= 0)
             {
+                _ = CloseNative(created);
+                descriptor = OpenExisting(lockFile, 2);
+            }
+            else if (Marshal.GetLastPInvokeError() == 17) // EEXIST; race
+                descriptor = OpenExisting(lockFile, 2);
+        }
+        if (descriptor < 0)
+            throw new IOException("No se pudo abrir el archivo de bloqueo (errno=" +
+                Marshal.GetLastPInvokeError() + ").");
+
+        bool acquired = false;
+        try
+        {
+            for (int attempt = 0; attempt < 200; ++attempt)
+            {
+                if (Flock(descriptor, LockExclusive | LockNonBlocking) == 0)
+                {
+                    acquired = true;
+                    return new StockLease(descriptor);
+                }
+                int error = Marshal.GetLastPInvokeError();
+                // EWOULDBLOCK=EAGAIN on Linux (11); EWOULDBLOCK=35 on macOS.
+                if (error != 11 && error != 35)
+                    throw new IOException("Error POSIX flock (errno=" + error + ").");
                 Thread.Sleep(10);
             }
+            throw new IOException("Tiempo de espera agotado para el bloqueo compartido.");
         }
-        throw new IOException("No se pudo adquirir el bloqueo de inventario.");
+        finally
+        {
+            if (!acquired) _ = CloseNative(descriptor);
+        }
     }
 
     /// <summary>
@@ -36,7 +126,7 @@ internal static class StockLedger
     internal static void WithExclusiveLock(string stockPath, Action operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        using FileStream held = Acquire(stockPath);
+        using IDisposable held = Acquire(stockPath);
         operation();
     }
 
@@ -95,6 +185,33 @@ internal static class StockLedger
         }, out updated);
     }
 
+    private static void ReplaceAtomically(string source, string destination)
+    {
+        // On Windows an unrelated reader may briefly hold the existing stock
+        // file without FILE_SHARE_DELETE. Retrying only the final atomic
+        // replace is safe: the transaction still owns stock.txt.lock and has
+        // not released or recomputed its read-modify-write state.
+        for (int attempt = 0; attempt < 200; attempt++)
+        {
+            try
+            {
+                File.Replace(source, destination, null);
+                return;
+            }
+            catch (IOException ex) when (OperatingSystem.IsWindows() &&
+                attempt < 199 && (ex.HResult & 0xFFFF) is 5 or 32 or 33)
+            {
+                Thread.Sleep(10);
+            }
+            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() &&
+                attempt < 199)
+            {
+                Thread.Sleep(10);
+            }
+        }
+        throw new IOException("No se pudo reemplazar el stock de forma atómica.");
+    }
+
     private static bool Apply(string path, string currency, int expected,
         Func<BigInteger[], BigInteger[]?> transform, out List<BigInteger> final)
     {
@@ -103,7 +220,7 @@ internal static class StockLedger
         string? staging = null;
         try
         {
-            using FileStream held = Acquire(path);
+            using IDisposable held = Acquire(path);
             string[] lines = File.ReadAllLines(path);
             string key = TextKey.Normalize(currency);
             int header = Array.FindIndex(lines, line => TextKey.Normalize(line) == key);
@@ -134,7 +251,7 @@ internal static class StockLedger
                 ".stock-" + Guid.NewGuid().ToString("N") + ".tmp");
             File.WriteAllLines(staging, lines, new UTF8Encoding(false));
             // File.Replace conserva el original si falla la escritura previa.
-            File.Replace(staging, path, null);
+            ReplaceAtomically(staging, path);
             staging = null;
             final = newValues.ToList();
             // Igual que el C original: el historial es informativo y su fallo
@@ -154,6 +271,8 @@ internal static class StockLedger
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
             InvalidDataException or FormatException)
         {
+            if (Environment.GetEnvironmentVariable("PROGVORAZ_DIAGNOSTIC_LOCKS") == "1")
+                System.Console.Error.WriteLine("StockLedger " + currency + ": " + ex);
             return false;
         }
         finally
