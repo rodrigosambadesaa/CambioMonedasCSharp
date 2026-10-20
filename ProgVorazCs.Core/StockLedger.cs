@@ -226,6 +226,8 @@ internal static class StockLedger
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
             InvalidDataException or FormatException)
         {
+            if (Environment.GetEnvironmentVariable("PROGVORAZ_DIAGNOSTIC_LOCKS") == "1")
+                System.Console.Error.WriteLine("StockLedger " + currency + ": " + ex);
             return false;
         }
         finally
