@@ -106,6 +106,26 @@ Match(6, [4,3,1], [0,2,0], 2, 2, true, 2);
 Match(6, [4,3,1], [1,1,0], 0, null, false);
 Match(0, [4,3,1], null, 0, null, true, 0);
 Match(BigInteger.Parse("99999999999999999999999999999999999"), [5,1], null, 0, null, true);
+// For a non-canonical system greedy would return 50003 pieces: 50001 x 4 + 2 x 1.
+// The globally optimal solution is 50000 x 4 + 2 x 3 = 50002 pieces.
+var nonCanonicalLarge = EnhancedChangeEngine.Compute(
+    200_006, [new BigInteger(4),new BigInteger(3),BigInteger.One]);
+Check(nonCanonicalLarge?.TotalCoins == 50_002, "residue Dijkstra must beat greedy for large change");
+Check(nonCanonicalLarge.Counts.SequenceEqual(
+    [new BigInteger(50_000),new BigInteger(2),BigInteger.Zero]),
+    "correct non-canonical large reconstruction");
+Check(EnhancedChangeEngine.Compute(200_006,
+    [new BigInteger(4),new BigInteger(3),BigInteger.One], maxCoins: 50_001) is null,
+    "globally optimal lower bound for maximum coins");
+var astronomicalNonCanonical = EnhancedChangeEngine.Compute(
+    BigInteger.Parse("1000000000000000000000000000000000000000006"),
+    [new BigInteger(4),new BigInteger(3),BigInteger.One]);
+Check(astronomicalNonCanonical is not null &&
+    astronomicalNonCanonical.Counts.Zip(
+        [new BigInteger(4),new BigInteger(3),BigInteger.One],
+        (a,b) => a*b).Aggregate(BigInteger.Zero,(a,b)=>a+b)
+    == astronomicalNonCanonical.Covered, "arbitrary precision in residue solver");
+
 var nearest = EnhancedChangeEngine.Compute(11, [new BigInteger(6), new BigInteger(4)], nearest: true);
 Check(nearest?.Covered == 10, "importe cercano incorrecto");
 var unreachableNear = EnhancedChangeEngine.Compute(150_000,

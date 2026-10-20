@@ -189,3 +189,7 @@ consume inventario. Este modo conserva los menús de texto; los clientes
 que precisen exclusivamente JSON deben extraer la línea JSON o usar
 la exportación JSON dedicada. Actions verifica el formato en
 Linux, macOS y Windows.
+
+## Cambio exacto para importes grandes no canónicos
+
+El motor usa Dijkstra sobre los residuos del valor de la mayor denominación (hasta 50.000 céntimos). Minimiza de manera demostrable el número de piezas cuando la clase de residuo tiene una representación mínima que cabe en el importe. Se mantiene la ruta BigInteger para cantidades astronómicas. Los ejemplos de regresión incluyen denominaciones `4,3,1`, donde el algoritmo voraz resulta subóptimo.
