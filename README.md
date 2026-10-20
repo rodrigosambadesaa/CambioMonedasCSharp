@@ -155,3 +155,15 @@ de recepción, consumo y ajuste. Copia el snapshot a un archivo de preparación,
 valida todas las divisas y efectúa la sustitución de \`stock.txt\` antes de liberar
 el bloqueo. Un snapshot incompleto se rechaza preservando el inventario.
 El bloqueo solo coordina aplicaciones C# que empleen \`StockLedger\`.
+
+
+## Menú interactivo ampliado
+
+El programa de consola ya incluye los comandos del menú principal del C
+original: \`x\`/\`convertir\`, \`caja\`, \`historial\`, \`resumen\`,
+\`snapshot\`, \`restaurar\`, \`reporte\` y \`json\`, con varios alias
+en inglés. La conversión y el cambio específico verifican los datos
+antes de mostrar resultados; un error de stock no confirma la operación.
+Las exportaciones y la restauración trabajan sobre las rutas indicadas
+por el usuario. Al recibir EOF, la consola finaliza en lugar de
+repetir indefinidamente el menú.
