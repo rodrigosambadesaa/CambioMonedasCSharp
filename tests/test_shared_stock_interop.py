@@ -56,8 +56,12 @@ with tempfile.TemporaryDirectory(prefix="cambio-shared-lock-") as directory:
                                   text=True)
         try:
             time.sleep(0.35)
-            assert first.poll() is None, "C++ ignored externally held flock"
-            assert second.poll() is None, "C# ignored externally held flock"
+            if first.poll() is not None:
+                out, err = first.communicate(timeout=5)
+                raise AssertionError(f"C++ ignored flock or exited: {first.returncode}: {out} / {err}")
+            if second.poll() is not None:
+                out, err = second.communicate(timeout=5)
+                raise AssertionError(f"C# ignored flock or exited: {second.returncode}: {out} / {err}")
             assert read_stock(stockfile) == (0, 0, 200), "writes bypassed flock"
         finally:
             fcntl.flock(held, fcntl.LOCK_UN)

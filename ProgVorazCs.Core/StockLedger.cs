@@ -12,26 +12,40 @@ namespace ProgVorazCs.Core;
 /// </summary>
 internal static class StockLedger
 {
-    // The C++ port already uses flock(LOCK_EX) on stock.txt.lock on POSIX.
-    // FileShare.None alone is not a portable interoperability contract with
-    // native flock callers. The explicit OS-level lock makes both agree.
-    private const int LockExclusive = 2;
-    private const int LockNonBlocking = 4;
-    private const int LockUnlock = 8;
+    // Use *native* open() on Unix: .NET FileStream's FileShare layer may
+    // itself acquire advisory locks while opening, before our retry loop can
+    // call flock. A plain POSIX fd matches the independent C++ implementation.
+    private const int LockExclusive = 2, LockNonBlocking = 4, LockUnlock = 8;
 
     [DllImport("libc", EntryPoint = "flock", SetLastError = true)]
     private static extern int Flock(int descriptor, int operation);
 
-    private sealed class StockLease(FileStream stream, bool posix) : IDisposable
+    [DllImport("libc", EntryPoint = "open", SetLastError = true)]
+    private static extern int OpenNative(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string pathname, int flags, int mode);
+
+    [DllImport("libc", EntryPoint = "close", SetLastError = true)]
+    private static extern int CloseNative(int descriptor);
+
+    private sealed class StockLease : IDisposable
     {
+        private FileStream? windowsStream;
+        private int unixDescriptor = -1;
+
+        public StockLease(FileStream stream) { windowsStream = stream; }
+        public StockLease(int descriptor) { unixDescriptor = descriptor; }
+
         public void Dispose()
         {
-            try
+            if (unixDescriptor >= 0)
             {
-                if (posix)
-                    _ = Flock(stream.SafeFileHandle.DangerousGetHandle().ToInt32(), LockUnlock);
+                int fd = unixDescriptor;
+                unixDescriptor = -1;
+                try { _ = Flock(fd, LockUnlock); }
+                finally { _ = CloseNative(fd); }
             }
-            finally { stream.Dispose(); }
+            windowsStream?.Dispose();
+            windowsStream = null;
         }
     }
 
@@ -40,45 +54,50 @@ internal static class StockLedger
         string lockFile = path + ".lock";
         if (OperatingSystem.IsWindows())
         {
-            // Matches C++ CreateFileA(..., dwShareMode=0) semantics.
+            // C++ Windows opens its .lock file with CreateFileA share mode 0.
             for (int attempt = 0; attempt < 200; ++attempt)
             {
                 try
                 {
                     return new StockLease(new FileStream(lockFile, FileMode.OpenOrCreate,
-                        FileAccess.ReadWrite, FileShare.None), false);
+                        FileAccess.ReadWrite, FileShare.None));
                 }
                 catch (IOException) when (attempt < 199) { Thread.Sleep(10); }
             }
             throw new IOException("No se pudo adquirir el bloqueo Win32 de inventario.");
         }
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
-            throw new PlatformNotSupportedException("Se requiere bloqueo POSIX flock o Windows.");
 
-        FileStream stream = new(lockFile, FileMode.OpenOrCreate,
-            FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+            throw new PlatformNotSupportedException("Se requiere POSIX flock o Windows.");
+
+        // POSIX O_RDWR|O_CREAT differ on Linux and macOS; mode 0600.
+        int create = OperatingSystem.IsMacOS() ? 0x0200 : 0x0040;
+        int descriptor = OpenNative(lockFile, 2 | create, 0x180);
+        if (descriptor < 0)
+            throw new IOException("No se pudo abrir el archivo de bloqueo (errno=" +
+                Marshal.GetLastPInvokeError() + ").");
+
         bool acquired = false;
         try
         {
-            int descriptor = stream.SafeFileHandle.DangerousGetHandle().ToInt32();
             for (int attempt = 0; attempt < 200; ++attempt)
             {
                 if (Flock(descriptor, LockExclusive | LockNonBlocking) == 0)
                 {
                     acquired = true;
-                    return new StockLease(stream, true);
+                    return new StockLease(descriptor);
                 }
                 int error = Marshal.GetLastPInvokeError();
-                // EAGAIN / EWOULDBLOCK = 11 on Linux, 35 on macOS.
+                // EWOULDBLOCK=EAGAIN on Linux (11); EWOULDBLOCK=35 on macOS.
                 if (error != 11 && error != 35)
-                    throw new IOException("No se pudo bloquear el inventario con flock (errno=" + error + ").");
+                    throw new IOException("Error POSIX flock (errno=" + error + ").");
                 Thread.Sleep(10);
             }
-            throw new IOException("Se agotó el plazo de bloqueo de inventario compartido.");
+            throw new IOException("Tiempo de espera agotado para el bloqueo compartido.");
         }
         finally
         {
-            if (!acquired) stream.Dispose();
+            if (!acquired) _ = CloseNative(descriptor);
         }
     }
 
