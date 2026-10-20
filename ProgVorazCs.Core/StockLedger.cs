@@ -20,9 +20,16 @@ internal static class StockLedger
     [DllImport("libc", EntryPoint = "flock", SetLastError = true)]
     private static extern int Flock(int descriptor, int operation);
 
+    // Darwin arm64 passes C variadic arguments on the stack, while fixed
+    // P/Invoke parameters use registers. Never P/Invoke open(path, flags, mode):
+    // mode can silently become 000, creating an unreadable lock file.
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
-    private static extern int OpenNative(
-        [MarshalAs(UnmanagedType.LPUTF8Str)] string pathname, int flags, int mode);
+    private static extern int OpenExisting(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string pathname, int flags);
+
+    [DllImport("libc", EntryPoint = "creat", SetLastError = true)]
+    private static extern int CreateNative(
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string pathname, int mode);
 
     [DllImport("libc", EntryPoint = "close", SetLastError = true)]
     private static extern int CloseNative(int descriptor);
@@ -70,9 +77,20 @@ internal static class StockLedger
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
             throw new PlatformNotSupportedException("Se requiere POSIX flock o Windows.");
 
-        // POSIX O_RDWR|O_CREAT differ on Linux and macOS; mode 0600.
-        int create = OperatingSystem.IsMacOS() ? 0x0200 : 0x0040;
-        int descriptor = OpenNative(lockFile, 2 | create, 0x180);
+        // open() is invoked with TWO fixed arguments only. creat() has
+        // two fixed arguments and is used only for the initial missing file.
+        int descriptor = OpenExisting(lockFile, 2); // O_RDWR on POSIX.
+        if (descriptor < 0 && Marshal.GetLastPInvokeError() == 2) // ENOENT
+        {
+            int created = CreateNative(lockFile, 0x180); // mode 0600.
+            if (created >= 0)
+            {
+                _ = CloseNative(created);
+                descriptor = OpenExisting(lockFile, 2);
+            }
+            else if (Marshal.GetLastPInvokeError() == 17) // EEXIST; race
+                descriptor = OpenExisting(lockFile, 2);
+        }
         if (descriptor < 0)
             throw new IOException("No se pudo abrir el archivo de bloqueo (errno=" +
                 Marshal.GetLastPInvokeError() + ").");
