@@ -43,7 +43,9 @@ internal static class AppConsole
         {
             ShowAvailableCurrencies(repo);
             Console.Write("Nombre de la moneda (ej: euro, dolar, yen), 'modo', 'volver' o 'salir': ");
-            string input = (Console.ReadLine() ?? string.Empty).Trim();
+            string? rawInput = Console.ReadLine();
+            if (rawInput is null) return false; // EOF must terminate, never busy-loop.
+            string input = rawInput.Trim();
             string command = TextKey.Normalize(input);
 
             if (command == "salir")
@@ -106,7 +108,9 @@ internal static class AppConsole
         while (true)
         {
             Console.Write("Cantidad en centimos (0, volver, limite, cercano, especifico, historial, resumen o salir): ");
-            string input = (Console.ReadLine() ?? string.Empty).Trim();
+            string? rawInput = Console.ReadLine();
+            if (rawInput is null) return false; // EOF must terminate, never busy-loop.
+            string input = rawInput.Trim();
             string command = TextKey.Normalize(input);
 
             if (command == "salir")
@@ -383,7 +387,9 @@ internal static class AppConsole
             }
 
             Console.Write("Accion admin (anadir/quitar, volver, modo, salir): ");
-            string action = TextKey.Normalize((Console.ReadLine() ?? string.Empty).Trim());
+            string? actionInput = Console.ReadLine();
+            if (actionInput is null) return false;
+            string action = TextKey.Normalize(actionInput.Trim());
             if (action == "salir")
             {
                 return false;
@@ -403,14 +409,18 @@ internal static class AppConsole
             bool add = action == "anadir";
 
             Console.Write($"Indice de denominacion (1-{currency.Denominations.Count}): ");
-            if (!int.TryParse(Console.ReadLine(), out int idx) || idx < 1 || idx > currency.Denominations.Count)
+            string? indexInput = Console.ReadLine();
+            if (indexInput is null) return false;
+            if (!int.TryParse(indexInput, out int idx) || idx < 1 || idx > currency.Denominations.Count)
             {
                 Console.WriteLine("Indice invalido.");
                 continue;
             }
 
             Console.Write("Cantidad: ");
-            if (!BigInteger.TryParse(Console.ReadLine(), NumberStyles.None, CultureInfo.InvariantCulture, out BigInteger delta) || delta < 0)
+            string? deltaInput = Console.ReadLine();
+            if (deltaInput is null) return false;
+            if (!BigInteger.TryParse(deltaInput, NumberStyles.None, CultureInfo.InvariantCulture, out BigInteger delta) || delta < 0)
             {
                 Console.WriteLine("Cantidad invalida.");
                 continue;

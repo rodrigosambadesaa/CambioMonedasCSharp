@@ -113,6 +113,15 @@ jobs:
           grep -q 'Divisas disponibles' currencies.out
           grep -q 'euro:' currencies.out
 
+      - name: EOF exits from all nested console states (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: python3 tests/test_console_eof.py dotnet ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll
+
+      - name: EOF exits from all nested console states (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python tests/test_console_eof.py dotnet ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll
+
       - name: Smoke consola modo a (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
