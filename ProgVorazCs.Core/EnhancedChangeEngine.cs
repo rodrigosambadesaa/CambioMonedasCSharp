@@ -35,6 +35,9 @@ public static class EnhancedChangeEngine
         const int maxDynamicAmount = 200_000;
         if (amount > maxDynamicAmount)
         {
+            if (denominations.Count == 2 && denominations[0] != denominations[1])
+                return SolveTwoDenominations(amount, denominations, stock, minCoins, maxCoins);
+
             // Shortest paths over residues are EXACT for unlimited stock once the
             // minimal-penalty representative fits within the requested amount.
             // This matters for non-canonical systems where greedy is suboptimal.
@@ -228,6 +231,72 @@ public static class EnhancedChangeEngine
         }
         if (current != 0) return null;
         return new Answer(amount, counts);
+    }
+
+    /// <summary>
+    /// Exact solution of a*x + b*y = amount, with optional inventories.
+    /// Extended Euclid gives one residue class for x; we choose the largest
+    /// feasible x because the higher denomination minimizes the total number
+    /// of pieces. Constraints on minimum/maximum pieces are applied using
+    /// closed-form moves across the Diophantine solution lattice.
+    /// </summary>
+    private static Answer? SolveTwoDenominations(BigInteger amount,
+        IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger>? stock,
+        int minCoins, int? maxCoins)
+    {
+        int high = denominations[0] > denominations[1] ? 0 : 1;
+        int low = 1 - high;
+        BigInteger a = denominations[high], b = denominations[low];
+        BigInteger gcd = BigInteger.GreatestCommonDivisor(a, b);
+        if (amount % gcd != 0) return null;
+        BigInteger aReduced = a / gcd, bReduced = b / gcd;
+        BigInteger x0 = bReduced == 1 ? BigInteger.Zero :
+            ((amount / gcd) * ModularInverse(aReduced, bReduced)) % bReduced;
+        BigInteger upper = amount / a;
+        BigInteger lower = BigInteger.Zero;
+        if (stock is not null)
+        {
+            upper = BigInteger.Min(upper, stock[high]);
+            BigInteger lowerNumerator = amount - b * stock[low];
+            if (lowerNumerator > 0)
+                lower = (lowerNumerator + a - 1) / a;
+        }
+        if (upper < x0) return null;
+        BigInteger x = x0 + ((upper - x0) / bReduced) * bReduced;
+        if (x < lower) return null;
+        BigInteger y = (amount - a * x) / b;
+        BigInteger total = x + y;
+        // Moving x downward by b/g increases y by a/g. Thus each step
+        // adds exactly a/g - b/g coins while preserving the amount.
+        if (total < minCoins)
+        {
+            BigInteger increment = aReduced - bReduced;
+            BigInteger moves = (minCoins - total + increment - 1) / increment;
+            x -= moves * bReduced;
+            if (x < lower) return null;
+            y += moves * aReduced;
+            total = x + y;
+        }
+        if (maxCoins.HasValue && total > maxCoins.Value) return null;
+        BigInteger[] counts = new BigInteger[2];
+        counts[high] = x;
+        counts[low] = y;
+        return new Answer(amount, counts);
+    }
+
+    private static BigInteger ModularInverse(BigInteger value, BigInteger modulus)
+    {
+        BigInteger oldR = modulus, r = value % modulus;
+        BigInteger oldT = BigInteger.Zero, t = BigInteger.One;
+        while (r != 0)
+        {
+            BigInteger q = oldR / r;
+            (oldR, r) = (r, oldR - q * r);
+            (oldT, t) = (t, oldT - q * t);
+        }
+        if (oldR != 1)
+            throw new ArgumentException("Las denominaciones reducidas no son coprimas.");
+        return (oldT % modulus + modulus) % modulus;
     }
 
     private static Answer? GreedyLarge(BigInteger amount, IReadOnlyList<BigInteger> denominations,

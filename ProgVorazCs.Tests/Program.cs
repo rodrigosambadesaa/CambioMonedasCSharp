@@ -117,6 +117,39 @@ Check(nonCanonicalLarge.Counts.SequenceEqual(
 Check(EnhancedChangeEngine.Compute(200_006,
     [new BigInteger(4),new BigInteger(3),BigInteger.One], maxCoins: 50_001) is null,
     "globally optimal lower bound for maximum coins");
+// Mathematical, unbounded-amount tests for exactly two denominations:
+// 7x + 4y = 200006. Maximal x in the congruence class is globally optimal.
+var hugeTwo = EnhancedChangeEngine.Compute(
+    200_006, [new BigInteger(7), new BigInteger(4)]);
+Check(hugeTwo is not null && hugeTwo.Covered == 200_006 &&
+    hugeTwo.Counts[0] * 7 + hugeTwo.Counts[1] * 4 == 200_006,
+    "two-denomination Diophantine amount");
+Check(hugeTwo!.Counts[0] == 28_570 && hugeTwo.Counts[1] == 4,
+    "two-denomination optimum, 28570 * 7 + 4 * 4");
+var stockTwo = EnhancedChangeEngine.Compute(
+    200_006, [new BigInteger(7), new BigInteger(4)],
+    [new BigInteger(28_566), new BigInteger(100)]);
+Check(stockTwo?.Counts[0] == 28_566 &&
+    stockTwo.Counts[1] == 11, "two-denomination bounded optimum");
+Check(EnhancedChangeEngine.Compute(200_006,
+    [new BigInteger(7),new BigInteger(4)],
+    [new BigInteger(28_565),new BigInteger(11)]) is null,
+    "bounded two-denomination no-solution");
+Check(EnhancedChangeEngine.Compute(200_006,
+    [new BigInteger(7),new BigInteger(4)], maxCoins: 28_573) is null,
+    "minimum-coin bound proves no solution");
+var rangedTwo = EnhancedChangeEngine.Compute(200_006,
+    [new BigInteger(7),new BigInteger(4)], minCoins: 28_577,
+    maxCoins: 28_577);
+Check(rangedTwo?.Counts[0] == 28_566 && rangedTwo.Counts[1] == 11,
+    "two-denomination exact coin-count interval");
+var hugeWithStock = EnhancedChangeEngine.Compute(
+    BigInteger.Parse("999999999999999999999999999999999999"),
+    [new BigInteger(5),BigInteger.One],
+    [BigInteger.Parse("199999999999999999999999999999999999"), new BigInteger(4)]);
+Check(hugeWithStock is not null && hugeWithStock.Counts[1] == 4,
+    "huge bounded-coin change without amount DP");
+
 var astronomicalNonCanonical = EnhancedChangeEngine.Compute(
     BigInteger.Parse("1000000000000000000000000000000000000000006"),
     [new BigInteger(4),new BigInteger(3),BigInteger.One]);
