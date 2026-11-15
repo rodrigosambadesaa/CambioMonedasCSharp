@@ -151,7 +151,7 @@ public static class CliHost
     private static int LaunchGui(string dataRoot)
     {
         if (!OperatingSystem.IsWindows())
-            throw new NotSupportedException("La GUI WinForms sólo se ejecuta en Windows.");
+            return GuiPortable.Run(dataRoot);
 
         string project = Path.Combine(dataRoot, "ProgVorazCs.Gui");
         // An installed release places the GUI beside the console executable.
