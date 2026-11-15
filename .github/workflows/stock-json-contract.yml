@@ -1,0 +1,30 @@
+name: Stock JSON contract (C#)
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stock-json:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Compile C# port
+        run: dotnet build ProgVorazCs.Console/ProgVorazCs.Console.csproj --configuration Release
+      - name: Validate exported JSON
+        run: python tests/test_stock_json_contract.py dotnet ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll
+      - name: Validate deterministic exchange conversions
+        run: python tests/test_exchange_stub.py dotnet ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll

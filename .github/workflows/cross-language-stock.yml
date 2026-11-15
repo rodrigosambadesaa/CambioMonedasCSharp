@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: rodrigosambadesaa/CambioMonedasCpp
-          ref: 8dd62b96efe717addfccac32377f000ff2a6b2c8
+          ref: f30c86d318d555d7823b22571ce595350d317032
           path: .ci/cpp
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -36,7 +36,7 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: .ci/cpp
         shell: pwsh
-        run: g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic main.cpp portable_cli.cpp moneda_gestion.cpp bigint.cpp vector_dinamico.cpp algoritmo_cambio.cpp -o progvoraz.exe -lws2_32
+        run: g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic main.cpp app_console.cpp portable_cli.cpp gui_launcher.cpp csv_io.cpp json_io.cpp exchange_api.cpp moneda_gestion.cpp bigint.cpp vector_dinamico.cpp algoritmo_cambio.cpp -o progvoraz.exe -lws2_32
       - name: Compile C#
         run: dotnet build ProgVorazCs.Console/ProgVorazCs.Console.csproj --configuration Release
       - name: Exercise actual flock protocol on Linux/macOS

@@ -54,14 +54,22 @@ public static class ExchangeRates
         // clave o devuelve error, se usa la configuración local sin inventar tasas.
         try
         {
-            string endpoint = "https://api.exchangerate.host/convert?from="
-                + Uri.EscapeDataString(sourceIso) + "&to="
-                + Uri.EscapeDataString(destinationIso) + "&amount=1";
+            // Frankfurter v2 publishes reference rates without requiring an API key.
+            // These are published reference rates, not real-time market quotes.
+            string endpoint = "https://api.frankfurter.dev/v2/rate/"
+                + sourceIso.ToLowerInvariant() + "/" + destinationIso.ToLowerInvariant();
             using HttpResponseMessage response = await Client.GetAsync(endpoint, cancellationToken);
             response.EnsureSuccessStatusCode();
             await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using JsonDocument doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            if (doc.RootElement.TryGetProperty("result", out JsonElement result)
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("base", out JsonElement baseCode)
+                && baseCode.ValueKind == JsonValueKind.String
+                && string.Equals(baseCode.GetString(), sourceIso, StringComparison.OrdinalIgnoreCase)
+                && doc.RootElement.TryGetProperty("quote", out JsonElement quoteCode)
+                && quoteCode.ValueKind == JsonValueKind.String
+                && string.Equals(quoteCode.GetString(), destinationIso, StringComparison.OrdinalIgnoreCase)
+                && doc.RootElement.TryGetProperty("rate", out JsonElement result)
                 && result.ValueKind == JsonValueKind.Number
                 && result.TryGetDecimal(out decimal value) && value > 0)
                 return value;

@@ -4,37 +4,6 @@ using System.Text;
 
 namespace ProgVorazCs.Core;
 
-public sealed class CurrencyData
-{
-    public required string Name { get; set; }
-    public required List<BigInteger> Denominations { get; set; }
-    public required List<BigInteger> Stock { get; set; }
-}
-
-public static class TextKey
-{
-    public static string Normalize(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return string.Empty;
-        }
-
-        string normalized = text.Trim().Normalize(NormalizationForm.FormD);
-        StringBuilder sb = new();
-        foreach (char c in normalized)
-        {
-            UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(c);
-            if (category != UnicodeCategory.NonSpacingMark)
-            {
-                sb.Append(char.ToLowerInvariant(c));
-            }
-        }
-
-        return sb.ToString().Normalize(NormalizationForm.FormC);
-    }
-}
-
 public sealed class CurrencyRepository
 {
     private readonly string monedasPath;
@@ -135,7 +104,7 @@ public sealed class CurrencyRepository
         // Read all lines and close the handle before returning any tokens.
         string[] lines = [];
         bool obtained = false;
-        for (int attempt = 0; attempt < 200; attempt++)
+        for (int attempt = 0; attempt < 1000; attempt++)
         {
             try
             {
@@ -144,17 +113,17 @@ public sealed class CurrencyRepository
                 break;
             }
             catch (FileNotFoundException) when (OperatingSystem.IsWindows() &&
-                attempt < 199)
+                attempt < 999)
             {
                 Thread.Sleep(10);
             }
             catch (IOException ex) when (OperatingSystem.IsWindows() &&
-                attempt < 199 && (ex.HResult & 0xFFFF) is 5 or 32 or 33)
+                attempt < 999 && (ex.HResult & 0xFFFF) is 5 or 32 or 33)
             {
                 Thread.Sleep(10);
             }
             catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() &&
-                attempt < 199)
+                attempt < 999)
             {
                 // Win32 replacement can manifest as UnauthorizedAccessException
                 // rather than IOException while a writer swaps stock.txt.
@@ -222,97 +191,5 @@ public sealed class CurrencyRepository
         }
 
         return true;
-    }
-}
-
-public static class ChangeCalculator
-{
-    public static bool ComputeUnlimited(BigInteger amount, IReadOnlyList<BigInteger> denominations, out List<BigInteger> result)
-    {
-        var answer = EnhancedChangeEngine.Compute(amount, denominations);
-        result = answer?.Counts.ToList() ?? [];
-        return answer is not null;
-    }
-
-    public static bool ComputeLimited(
-        BigInteger amount,
-        IReadOnlyList<BigInteger> denominations,
-        IReadOnlyList<BigInteger> stock,
-        out List<BigInteger> result,
-        out List<BigInteger> updatedStock)
-    {
-        var answer = EnhancedChangeEngine.Compute(amount, denominations, stock);
-        result = answer?.Counts.ToList() ?? [];
-        updatedStock = answer is null ? stock.ToList() : stock.Zip(answer.Counts, (a,b) => a-b).ToList();
-        return answer is not null;
-    }
-
-    private static bool ComputeOptimal(BigInteger amount, IReadOnlyList<BigInteger> denominations,
-        IReadOnlyList<BigInteger>? stock, int maxCoins, int? minCoins,
-        out List<BigInteger> result, out List<BigInteger> updatedStock)
-    {
-        result = Enumerable.Repeat(BigInteger.Zero, denominations.Count).ToList();
-        updatedStock = stock?.ToList() ?? Enumerable.Repeat(BigInteger.Zero, denominations.Count).ToList();
-        if (amount < 0 || denominations.Count == 0 || (stock is not null && stock.Count != denominations.Count)) return false;
-
-        // DP keeps the optimal behaviour for non-canonical coin systems. For very large
-        // amounts, retain the previous greedy-compatible path without allocating huge arrays.
-        if (amount > 500_000 || amount > int.MaxValue)
-            return Greedy(amount, denominations, stock, result, updatedStock);
-
-        int target = (int)amount;
-        int[] best = Enumerable.Repeat(int.MaxValue, target + 1).ToArray();
-        int[] previous = Enumerable.Repeat(-1, target + 1).ToArray();
-        int[] coin = Enumerable.Repeat(-1, target + 1).ToArray();
-        best[0] = 0;
-
-        for (int i = 0; i < denominations.Count; i++)
-        {
-            if (denominations[i] <= 0 || denominations[i] > target || denominations[i] > int.MaxValue) continue;
-            int value = (int)denominations[i];
-            int copies = stock is null ? target / value : (int)BigInteger.Min(stock[i], target / value);
-            for (int copy = 0; copy < copies; copy++)
-                for (int sum = target; sum >= value; sum--)
-                    if (best[sum - value] != int.MaxValue && best[sum - value] + 1 < best[sum])
-                    {
-                        best[sum] = best[sum - value] + 1;
-                        previous[sum] = sum - value;
-                        coin[sum] = i;
-                    }
-
-            if (stock is null)
-                for (int sum = value; sum <= target; sum++)
-                    if (best[sum - value] != int.MaxValue && best[sum - value] + 1 < best[sum])
-                    {
-                        best[sum] = best[sum - value] + 1;
-                        previous[sum] = sum - value;
-                        coin[sum] = i;
-                    }
-        }
-
-        if (best[target] == int.MaxValue || (minCoins.HasValue && best[target] < minCoins) || (maxCoins > 0 && best[target] > maxCoins)) return false;
-        for (int sum = target; sum > 0; sum = previous[sum])
-        {
-            if (coin[sum] < 0 || previous[sum] >= sum) return false;
-            result[coin[sum]]++;
-        }
-        if (stock is not null)
-            for (int i = 0; i < result.Count; i++) updatedStock[i] = stock[i] - result[i];
-        return true;
-    }
-
-    private static bool Greedy(BigInteger amount, IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger>? stock,
-        List<BigInteger> result, List<BigInteger> updatedStock)
-    {
-        BigInteger remaining = amount;
-        for (int i = 0; i < denominations.Count; i++)
-        {
-            if (denominations[i] <= 0) continue;
-            BigInteger take = BigInteger.Divide(remaining, denominations[i]);
-            if (stock is not null) take = BigInteger.Min(take, stock[i]);
-            result[i] = take; remaining -= take * denominations[i];
-            if (stock is not null) updatedStock[i] -= take;
-        }
-        return remaining.IsZero;
     }
 }
