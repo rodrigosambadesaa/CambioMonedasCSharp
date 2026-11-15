@@ -62,14 +62,14 @@ internal static class StockLedger
         if (OperatingSystem.IsWindows())
         {
             // C++ Windows opens its .lock file with CreateFileA share mode 0.
-            for (int attempt = 0; attempt < 200; ++attempt)
+            for (int attempt = 0; attempt < 1000; ++attempt)
             {
                 try
                 {
                     return new StockLease(new FileStream(lockFile, FileMode.OpenOrCreate,
                         FileAccess.ReadWrite, FileShare.None));
                 }
-                catch (IOException) when (attempt < 199) { Thread.Sleep(10); }
+                catch (IOException) when (attempt < 999) { Thread.Sleep(10); }
             }
             throw new IOException("No se pudo adquirir el bloqueo Win32 de inventario.");
         }
@@ -98,7 +98,7 @@ internal static class StockLedger
         bool acquired = false;
         try
         {
-            for (int attempt = 0; attempt < 200; ++attempt)
+            for (int attempt = 0; attempt < 1000; ++attempt)
             {
                 if (Flock(descriptor, LockExclusive | LockNonBlocking) == 0)
                 {
@@ -191,7 +191,7 @@ internal static class StockLedger
         // file without FILE_SHARE_DELETE. Retrying only the final atomic
         // replace is safe: the transaction still owns stock.txt.lock and has
         // not released or recomputed its read-modify-write state.
-        for (int attempt = 0; attempt < 200; attempt++)
+        for (int attempt = 0; attempt < 1000; attempt++)
         {
             try
             {
@@ -199,12 +199,12 @@ internal static class StockLedger
                 return;
             }
             catch (IOException ex) when (OperatingSystem.IsWindows() &&
-                attempt < 199 && (ex.HResult & 0xFFFF) is 5 or 32 or 33)
+                attempt < 999 && (ex.HResult & 0xFFFF) is 5 or 32 or 33)
             {
                 Thread.Sleep(10);
             }
             catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() &&
-                attempt < 199)
+                attempt < 999)
             {
                 Thread.Sleep(10);
             }
