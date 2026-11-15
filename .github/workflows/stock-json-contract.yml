@@ -26,3 +26,5 @@ jobs:
         run: dotnet build ProgVorazCs.Console/ProgVorazCs.Console.csproj --configuration Release
       - name: Validate exported JSON
         run: python tests/test_stock_json_contract.py dotnet ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll
+      - name: Validate deterministic exchange conversions
+        run: python tests/test_exchange_stub.py dotnet ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll
