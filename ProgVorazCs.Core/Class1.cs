@@ -135,7 +135,7 @@ public sealed class CurrencyRepository
         // Read all lines and close the handle before returning any tokens.
         string[] lines = [];
         bool obtained = false;
-        for (int attempt = 0; attempt < 200; attempt++)
+        for (int attempt = 0; attempt < 1000; attempt++)
         {
             try
             {
@@ -144,17 +144,17 @@ public sealed class CurrencyRepository
                 break;
             }
             catch (FileNotFoundException) when (OperatingSystem.IsWindows() &&
-                attempt < 199)
+                attempt < 999)
             {
                 Thread.Sleep(10);
             }
             catch (IOException ex) when (OperatingSystem.IsWindows() &&
-                attempt < 199 && (ex.HResult & 0xFFFF) is 5 or 32 or 33)
+                attempt < 999 && (ex.HResult & 0xFFFF) is 5 or 32 or 33)
             {
                 Thread.Sleep(10);
             }
             catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() &&
-                attempt < 199)
+                attempt < 999)
             {
                 // Win32 replacement can manifest as UnauthorizedAccessException
                 // rather than IOException while a writer swaps stock.txt.
