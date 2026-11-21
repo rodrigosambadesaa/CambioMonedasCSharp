@@ -88,7 +88,23 @@ public static class ExchangeRates
         if (!File.Exists(path))
             throw new InvalidDataException("No existe una tasa disponible: " + fromIso + "_" + toIso);
 
-        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
+        // Read at most 16 Ki UTF-16 chars: a corrupt or hostile fixture must
+        // never be able to make the process allocate an unbounded JSON buffer.
+        const int maxStubChars = 16 * 1024;
+        using StreamReader reader = new(path, new System.Text.UTF8Encoding(false, true));
+        char[] buffer = new char[maxStubChars + 1];
+        int length = reader.ReadBlock(buffer, 0, buffer.Length);
+        if (length > maxStubChars)
+            throw new InvalidDataException("Archivo de tasas excesivamente grande.");
+        using JsonDocument document = JsonDocument.Parse(new string(buffer, 0, length));
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Formato de tasas incorrecto.");
+        // JsonElement.TryGetProperty returns the LAST matching key. Reject
+        // duplicate keys explicitly to match the strict native implementations.
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (JsonProperty property in document.RootElement.EnumerateObject())
+            if (!names.Add(property.Name))
+                throw new InvalidDataException("Tasa duplicada: " + property.Name);
         if (!document.RootElement.TryGetProperty(fromIso + "_" + toIso, out JsonElement rate)
             || rate.ValueKind != JsonValueKind.Number || !rate.TryGetDecimal(out decimal value)
             || value <= 0)
