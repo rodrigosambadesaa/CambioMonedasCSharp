@@ -201,6 +201,22 @@ try
     File.WriteAllText(Path.Combine(temp, "rates_stub.json"), "{\"EUR_USD\":1.09,\"USD_EUR\":0.917}");
     Check(ExchangeRates.LoadStub("EUR", "USD", temp) == 1.09m, "stub EUR USD");
     Check(ExchangeRates.LoadStub("USD", "EUR", temp) == 0.917m, "stub USD EUR");
+    string stubPath = Path.Combine(temp, "rates_stub.json");
+    File.WriteAllText(stubPath, "{\"EUR_USD\":1.09,\"EUR_USD\":999999}");
+    try
+    {
+        _ = ExchangeRates.LoadStub("EUR", "USD", temp);
+        throw new Exception("Duplicated JSON rate was accepted");
+    }
+    catch (InvalidDataException) { }
+    File.WriteAllText(stubPath, "{\"EUR_USD\":" + new string('9', 20000) + "}");
+    try
+    {
+        _ = ExchangeRates.LoadStub("EUR", "USD", temp);
+        throw new Exception("Unbounded JSON rate was accepted");
+    }
+    catch (InvalidDataException) { }
+    File.WriteAllText(stubPath, "{\"EUR_USD\":1.09,\"USD_EUR\":0.917}");
     var service = new PortableServices(temp);
     Check(service.Validate("EUR"), "validacion EUR");
     // Validacion de fronteras de bloque: no sobrescribir otra divisa.
@@ -300,15 +316,43 @@ try
             Check(await client.GetStringAsync(url + "/health") == "OK", "HTTP health");
             string stockJson = await client.GetStringAsync(url + "/export_stock_json");
             Check(stockJson.Contains("\"nombre\": \"euro\""), "HTTP JSON");
-            using var response = await client.PostAsync(url + "/batch",
-                new StringContent("mode,moneda,monto\na,euro,6\n", System.Text.Encoding.UTF8, "text/csv"));
+            using var batchPayload = new StringContent("mode,moneda,monto\na,euro,6\n", System.Text.Encoding.UTF8, "text/csv");
+            using var response = await client.PostAsync(url + "/batch", batchPayload);
             Check(response.IsSuccessStatusCode, "HTTP batch status");
             Check((await response.Content.ReadAsStringAsync()).Contains("OK total=2"), "HTTP batch");
-            var notFound = await client.GetAsync(url + "/missing");
+            using var notFound = await client.GetAsync(url + "/missing");
             Check(notFound.StatusCode == System.Net.HttpStatusCode.NotFound, "HTTP 404");
             using var oversize = new ByteArrayContent(new byte[1024 * 1024 + 1]);
-            var tooLarge = await client.PostAsync(url + "/batch", oversize);
+            using var tooLarge = await client.PostAsync(url + "/batch", oversize);
             Check(tooLarge.StatusCode == System.Net.HttpStatusCode.RequestEntityTooLarge, "HTTP 413");
+
+            int? fdBefore = Directory.Exists("/proc/self/fd")
+                ? Directory.EnumerateFileSystemEntries("/proc/self/fd").Count() : null;
+            for (int i = 0; i < 32; i++)
+            {
+                using var repeated = await client.GetAsync(url + "/health");
+                Check(repeated.IsSuccessStatusCode, "HTTP repeated request " + i);
+            }
+            // An aborted upload must not cause an unhandled send failure that
+            // terminates the server and abandons future connections.
+            for (int i = 0; i < 8; i++)
+            {
+                using var aborted = new System.Net.Sockets.TcpClient();
+                await aborted.ConnectAsync("127.0.0.1", port);
+                aborted.LingerState = new System.Net.Sockets.LingerOption(true, 0);
+                byte[] incomplete = System.Text.Encoding.ASCII.GetBytes(
+                    "POST /batch HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\nbad");
+                await aborted.GetStream().WriteAsync(incomplete);
+                // Dispose with SO_LINGER=0: the server must tolerate TCP reset.
+            }
+            using (var finalCheck = await client.GetAsync(url + "/health"))
+                Check(finalCheck.IsSuccessStatusCode, "HTTP listener survives aborted uploads");
+            if (fdBefore is int initial && Directory.Exists("/proc/self/fd"))
+            {
+                int after = Directory.EnumerateFileSystemEntries("/proc/self/fd").Count();
+                Check(after <= initial + 16,
+                    "HTTP file descriptors grew without bound: " + initial + " -> " + after);
+            }
         }
         finally
         {
