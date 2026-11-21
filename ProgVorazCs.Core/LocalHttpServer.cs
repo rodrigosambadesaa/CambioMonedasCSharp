@@ -98,12 +98,36 @@ public static class LocalHttpServer
             }
             await SendAsync(context.Response, 404, "text/plain", "Not Found", cancel);
         }
-        catch (Exception e) when (e is IOException or DecoderFallbackException or ArgumentException)
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
         {
-            if (context.Response.OutputStream.CanWrite)
-                await SendAsync(context.Response, 400, "text/plain", "Bad Request", cancel);
+            // Cancellation while reading/writing a client must not leak a response.
         }
-        finally { context.Response.Close(); }
+        catch (Exception e) when (e is IOException or DecoderFallbackException or
+            ArgumentException or HttpListenerException or ObjectDisposedException)
+        {
+            // A disconnected peer may fail during SendAsync. Retrying a 400 on
+            // the already broken socket would propagate and kill the listener.
+            // Only malformed requests with an intact stream deserve a 400.
+            if (e is EndOfStreamException or DecoderFallbackException or ArgumentException)
+            {
+                try
+                {
+                    if (context.Response.OutputStream.CanWrite)
+                        await SendAsync(context.Response, 400, "text/plain", "Bad Request", cancel);
+                }
+                catch (Exception sendError) when (sendError is IOException or
+                    HttpListenerException or ObjectDisposedException or OperationCanceledException)
+                {
+                    // The client has disconnected or the server was cancelled.
+                }
+            }
+        }
+        finally
+        {
+            try { context.Response.Close(); }
+            catch (HttpListenerException) { }
+            catch (ObjectDisposedException) { }
+        }
     }
 
     private static async Task SendAsync(HttpListenerResponse response, int status,
