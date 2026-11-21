@@ -127,6 +127,7 @@ public static class LocalHttpServer
             try { context.Response.Close(); }
             catch (HttpListenerException) { }
             catch (ObjectDisposedException) { }
+            catch (IOException) { /* Client disconnected during response shutdown. */ }
         }
     }
 
