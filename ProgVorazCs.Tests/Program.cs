@@ -345,6 +345,20 @@ try
                 await aborted.GetStream().WriteAsync(incomplete);
                 // Dispose with SO_LINGER=0: the server must tolerate TCP reset.
             }
+            // FIN (orderly half-close) is different from SO_LINGER=0 TCP RST.
+            // This exercises incomplete body reads and their error replies.
+            for (int trial = 0; trial < 12; ++trial)
+            {
+                using var halfClosed = new System.Net.Sockets.TcpClient();
+                await halfClosed.ConnectAsync(System.Net.IPAddress.Loopback, port);
+                using var network = halfClosed.GetStream();
+                byte[] partial = System.Text.Encoding.ASCII.GetBytes(
+                    "POST /batch HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 1000\r\nConnection: close\r\n\r\npartial");
+                await network.WriteAsync(partial);
+                halfClosed.Client.Shutdown(System.Net.Sockets.SocketShutdown.Send);
+            }
+            Check(await client.GetStringAsync(url + "/health") == "OK",
+                "HTTP listener survived orderly half-closed request bodies");
             using (var finalCheck = await client.GetAsync(url + "/health"))
                 Check(finalCheck.IsSuccessStatusCode, "HTTP listener survives aborted uploads");
             if (fdBefore is int initial && Directory.Exists("/proc/self/fd"))
