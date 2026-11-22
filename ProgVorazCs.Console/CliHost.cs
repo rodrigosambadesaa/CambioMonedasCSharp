@@ -89,9 +89,13 @@ public static class CliHost
                 // Reject direct/relative/symlink aliases before opening any
                 // write-mode stream; never truncate a CSV we are still reading.
                 if (input is not null && output is not null &&
-                    SameBatchFile(input, output))
+                    SameBatchFile(input, output) ||
+                    input is not null && log is not null &&
+                    SameBatchFile(input, log) ||
+                    output is not null && log is not null &&
+                    SameBatchFile(output, log))
                     throw new ArgumentException(
-                        "La entrada CSV y la salida son el mismo archivo; no se sobrescribe.");
+                        "Entrada, salida y registro CSV deben usar archivos diferentes.");
 
                 // Always stage output beside its destination: if a hardlink
                 // alias cannot be identified portably, replacing a separate
