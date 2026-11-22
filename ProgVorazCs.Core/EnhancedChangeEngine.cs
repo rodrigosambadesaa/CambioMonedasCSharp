@@ -88,6 +88,15 @@ public static class EnhancedChangeEngine
         const int maxDynamicAmount = 200_000;
         if (amount > maxDynamicAmount)
         {
+            // Certify any exact solution of at most four pieces before costly DP.
+            // Lack of such a witness is inconclusive, never an impossibility proof.
+            if (!nearest)
+            {
+                Answer? small = ExactUpToFourCoins(
+                    amount, denominations, stock, minCoins, maxCoins);
+                if (small is not null) return small;
+            }
+
             // Exact sparse knapsack for finite inventories, independent
             // of the numeric size of amount or coin denominations.
             if (stock is not null && TrySparseLimitedLarge(amount, denominations,
@@ -458,6 +467,82 @@ public static class EnhancedChangeEngine
                 Consider(uncapped);
         }
         return best;
+    }
+
+    /// <summary>
+    /// Certifies the minimum count if a change exists with at most four pieces.
+    /// Two-piece sums make three/four-piece searches quadratic, not quartic.
+    /// A null result is inconclusive (never proof that change is impossible).
+    /// No amount-sized allocations, even for enormous BigInteger amounts.
+    /// </summary>
+    private static Answer? ExactUpToFourCoins(BigInteger amount,
+        IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger>? stock,
+        int minCoins, int? maxCoins)
+    {
+        int n = denominations.Count;
+        if (n == 0 || n > 64 || minCoins > 4 || maxCoins == 0)
+            return null;
+        int limit = Math.Min(4, maxCoins ?? 4);
+
+        bool Available(params int[] indices)
+        {
+            if (stock is null) return true;
+            for (int i = 0; i < indices.Length; i++)
+            {
+                int used = 1;
+                for (int j = i + 1; j < indices.Length; j++)
+                    if (indices[j] == indices[i]) used++;
+                if (stock[indices[i]] < used) return false;
+            }
+            return true;
+        }
+
+        Answer Result(params int[] indices)
+        {
+            var counts = new BigInteger[n];
+            foreach (int i in indices) counts[i]++;
+            return new Answer(amount, counts);
+        }
+
+        if (minCoins <= 1 && limit >= 1)
+            for (int i = 0; i < n; i++)
+                if (denominations[i] == amount && Available(i))
+                    return Result(i);
+
+        var pairs = new Dictionary<BigInteger, List<(int I, int J)>>();
+        if (limit < 2) return null;
+        for (int i = 0; i < n; i++)
+            for (int j = i; j < n; j++)
+            {
+                if (!Available(i, j)) continue;
+                BigInteger sum = denominations[i] + denominations[j];
+                if (sum > amount) continue;
+                if (minCoins <= 2 && sum == amount) return Result(i, j);
+                if (!pairs.TryGetValue(sum, out var entries))
+                    pairs[sum] = entries = [];
+                entries.Add((i, j));
+            }
+
+        if (limit >= 3 && minCoins <= 3)
+            for (int i = 0; i < n; i++)
+            {
+                BigInteger complement = amount - denominations[i];
+                if (!pairs.TryGetValue(complement, out var entries)) continue;
+                foreach (var (a, b) in entries)
+                    if (Available(i, a, b))
+                        return Result(i, a, b);
+            }
+
+        if (limit >= 4 && minCoins <= 4)
+            foreach (var (sum, entries) in pairs)
+            {
+                if (!pairs.TryGetValue(amount - sum, out var opposite)) continue;
+                foreach (var (a, b) in entries)
+                    foreach (var (c, d) in opposite)
+                        if (Available(a, b, c, d))
+                            return Result(a, b, c, d);
+            }
+        return null;
     }
 
     private static Answer? SolveTwoDenominations(BigInteger amount,
