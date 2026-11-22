@@ -172,7 +172,8 @@ public sealed class PortableServices
             { first = false; continue; }
             first = false;
             if (string.IsNullOrWhiteSpace(line)) continue;
-            string mode = fields.ElementAtOrDefault(0) ?? "a";
+            string mode = (fields.ElementAtOrDefault(0) ?? "a").ToLowerInvariant();
+            if (mode.Length == 0) mode = "a";
             string name = MapCurrency(fields.ElementAtOrDefault(1) ?? "");
             string amountText = fields.ElementAtOrDefault(2) ?? "0";
             string rangeText = fields.ElementAtOrDefault(3) ?? "";
@@ -180,6 +181,12 @@ public sealed class PortableServices
             {
                 WriteRow(output, "", "", amountText, "ERROR", english ? "invalid amount" : "monto invalido");
                 log?.WriteLine("invalid amount: " + amountText);
+                continue;
+            }
+            if (mode is not ("a" or "b" or "c"))
+            {
+                WriteRow(output, "", "", amountText, "ERROR", english ? "invalid mode" : "modo invalido");
+                log?.WriteLine("invalid mode: " + mode);
                 continue;
             }
             CurrencyData? currency = repository.LoadCurrency(name);
@@ -193,20 +200,39 @@ public sealed class PortableServices
             int? max = null;
             if (rangeText.Length != 0)
             {
-                string[] limits = rangeText.Split('-', 2);
-                if (!int.TryParse(limits[0], NumberStyles.None, CultureInfo.InvariantCulture, out int parsed)
-                    || parsed < 0 || limits.Length == 2 && (!int.TryParse(limits[1], NumberStyles.None, CultureInfo.InvariantCulture, out int _) ))
+                bool exact = rangeText.StartsWith("=", StringComparison.Ordinal);
+                string specification = exact ? rangeText[1..] : rangeText;
+                string[] limits = specification.Split('-', 2);
+                bool validLower = int.TryParse(limits[0], NumberStyles.None,
+                    CultureInfo.InvariantCulture, out int lower);
+                bool validUpper = limits.Length == 1 ||
+                    int.TryParse(limits[1], NumberStyles.None,
+                        CultureInfo.InvariantCulture, out int _);
+                if (!validLower || !validUpper || exact && limits.Length != 1)
                 {
                     WriteRow(output, "", name, amountText, "ERROR", "rango invalido");
                     continue;
                 }
                 if (limits.Length == 2)
                 {
-                    min = parsed;
-                    max = int.Parse(limits[1], CultureInfo.InvariantCulture);
+                    // Both values were parsed above; neither may be negative or inverted.
+                    int upper = int.Parse(limits[1], NumberStyles.None,
+                        CultureInfo.InvariantCulture);
+                    if (lower > upper)
+                    {
+                        WriteRow(output, "", name, amountText, "ERROR", "rango invalido");
+                        continue;
+                    }
+                    min = lower;
+                    max = upper;
                 }
-                else max = parsed;
+                else
+                {
+                    max = lower;
+                    if (exact) min = lower;
+                }
             }
+
             EnhancedChangeEngine.Answer? answer;
             try
             {
