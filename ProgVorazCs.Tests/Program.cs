@@ -429,7 +429,7 @@ Check(optimizedStock is not null && optimizedStock.TotalCoins == 2 &&
       "noncanonical exact two pieces with finite inventory");
 
 var optimizedRestrictedStock = EnhancedChangeEngine.Compute(1_400_000,
-    noncanonicalGcdOne, new BigInteger[] { 100, 1, 100, 100 });
+    noncanonicalGcdOne, new BigInteger[] { 0, 1, 100, 100000 });
 Check(optimizedRestrictedStock is not null && optimizedRestrictedStock.TotalCoins > 2,
       "limited stock forbids reuse of the only 700000 coin");
 
