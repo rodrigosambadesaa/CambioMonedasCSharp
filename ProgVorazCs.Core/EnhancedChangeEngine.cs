@@ -46,6 +46,16 @@ public static class EnhancedChangeEngine
             return new Answer(singleCovered, [count]);
         }
 
+        // With exactly two denominations, a positive lower coin bound can
+        // require a valid nonminimal solution. The ordinary DP tracks only
+        // the minimum count and refuses full (amount,count) search above
+        // 20,000 units. Extended Euclid handles that case without a table.
+        if (!nearest && denominations.Count == 2 &&
+            denominations[0] != denominations[1] &&
+            minCoins > 0)
+            return SolveTwoDenominations(amount, denominations, stock,
+                                         minCoins, maxCoins);
+
         // Las cantidades astronómicas no admiten DP proporcional al monto.
         // Se conserva la ruta exacta de division descendente del programa C para
         // monedas canonicas; nunca se fabrica un resultado si hay resto.
