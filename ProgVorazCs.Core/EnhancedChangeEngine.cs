@@ -39,11 +39,11 @@ public static class EnhancedChangeEngine
                 count = BigInteger.Min(count, stock[0]);
             if (maxCoins.HasValue)
                 count = BigInteger.Min(count, maxCoins.Value);
-            BigInteger covered = count * denominations[0];
-            if (count < minCoins || nearest && covered == 0 ||
-                !nearest && covered != amount)
+            BigInteger singleCovered = count * denominations[0];
+            if (count < minCoins || nearest && singleCovered == 0 ||
+                !nearest && singleCovered != amount)
                 return null;
-            return new Answer(covered, [count]);
+            return new Answer(singleCovered, [count]);
         }
 
         // Las cantidades astronómicas no admiten DP proporcional al monto.
