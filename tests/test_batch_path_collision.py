@@ -38,6 +38,27 @@ def main():
             hard = root / "hardlink.csv"
             hard.hardlink_to(source)
             check("hardlink", "batch.csv", "hardlink.csv")
+        def check_log(label, output_path, log_path, expected_output=None):
+            attempt = subprocess.run(
+                command + ["--input", "batch.csv", "--output", output_path,
+                           "--log", log_path],
+                capture_output=True, text=True, cwd=root, timeout=30)
+            assert attempt.returncode != 0, (
+                label, attempt.stdout, attempt.stderr)
+            assert source.read_bytes() == original, (label, "source changed")
+            if expected_output is not None:
+                assert (root / output_path).read_bytes() == expected_output, (
+                    label, "output changed")
+
+        check_log("input equals log", "out.csv", "batch.csv")
+        check_log("relative input equals log", "out.csv", "./batch.csv")
+        output_log = root / "shared-output.csv"
+        output_log.write_bytes(b"ORIGINAL OUTPUT\n")
+        check_log("output equals log", "shared-output.csv",
+                  "shared-output.csv", b"ORIGINAL OUTPUT\n")
+        check_log("relative output equals log", "shared-output.csv",
+                  "./shared-output.csv", b"ORIGINAL OUTPUT\n")
+
         result = subprocess.run(command + ["--input", "batch.csv", "--output", "out.csv"],
                                 cwd=root, capture_output=True, text=True, timeout=30)
         assert result.returncode == 0, (result.stdout, result.stderr)
