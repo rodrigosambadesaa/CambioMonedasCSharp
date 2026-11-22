@@ -200,7 +200,7 @@ public sealed class PortableServices
             int? max = null;
             if (rangeText.Length != 0)
             {
-                bool exact = rangeText.StartsWith('=', StringComparison.Ordinal);
+                bool exact = rangeText.StartsWith("=", StringComparison.Ordinal);
                 string specification = exact ? rangeText[1..] : rangeText;
                 string[] limits = specification.Split('-', 2);
                 bool validLower = int.TryParse(limits[0], NumberStyles.None,
