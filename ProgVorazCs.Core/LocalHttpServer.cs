@@ -25,8 +25,12 @@ public static class LocalHttpServer
                 HttpListenerContext context;
                 try { context = await listener.GetContextAsync().WaitAsync(cancel); }
                 catch (OperationCanceledException) when (cancel.IsCancellationRequested) { break; }
-                // HTTP requests are handled sequentially, as in the original server.
-                await HandleAsync(services, context, cancel);
+                // Each client has a finite deadline. A peer that sends only a
+                // partial request must not monopolize the sequential listener.
+                using CancellationTokenSource requestDeadline =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                requestDeadline.CancelAfter(TimeSpan.FromSeconds(5));
+                await HandleAsync(services, context, requestDeadline.Token);
             }
         }
         finally { listener.Stop(); }
