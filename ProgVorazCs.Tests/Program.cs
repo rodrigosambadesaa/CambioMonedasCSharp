@@ -429,4 +429,20 @@ Check(mixedNearest is not null && mixedNearest.Covered == 610_000 &&
       mixedNearest.Counts.SequenceEqual([new BigInteger(11), new BigInteger(2)]),
       "cambio cercano mixto BigInt de dos denominaciones debe minimizar piezas");
 
+// Coprime denominations bypass normalized DP; the old two-coin path
+// incorrectly returned null when the requested large amount was unreachable.
+var coprimeNearest = EnhancedChangeEngine.Compute(
+    new BigInteger(500_001),
+    [new BigInteger(50_000), new BigInteger(29_999)], nearest: true);
+Check(coprimeNearest is not null && coprimeNearest.Covered == 500_000 &&
+      coprimeNearest.Counts.SequenceEqual([new BigInteger(10), BigInteger.Zero]),
+      "cambio cercano BigInt de dos denominaciones coprimas");
+
+var coprimeMixed = EnhancedChangeEngine.Compute(
+    new BigInteger(610_001),
+    [new BigInteger(50_000), new BigInteger(29_999)], nearest: true);
+Check(coprimeMixed is not null && coprimeMixed.Covered == 609_998 &&
+      coprimeMixed.Counts.SequenceEqual([new BigInteger(11), new BigInteger(2)]),
+      "cambio cercano BigInt coprimo maximiza cobertura y minimiza piezas");
+
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
