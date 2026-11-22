@@ -88,8 +88,10 @@ public static class CliHost
             {
                 // Reject direct/relative/symlink aliases before opening any
                 // write-mode stream; never truncate a CSV we are still reading.
-                if (output is not null && IsOperationalDestination(output, dataRoot) ||
-                    log is not null && IsOperationalDestination(log, dataRoot) ||
+                if (output is not null && (IsOperationalDestination(output, dataRoot) ||
+                        IsSymbolicLink(output)) ||
+                    log is not null && (IsOperationalDestination(log, dataRoot) ||
+                        IsSymbolicLink(log)) ||
                     input is not null && output is not null &&
                     SameBatchFile(input, output) ||
                     input is not null && log is not null &&
@@ -197,6 +199,16 @@ public static class CliHost
             "stock.txt", "monedas.txt", "historial.txt", "stock.txt.lock" })
             if (SameBatchFile(path, Path.Combine(root, name))) return true;
         return false;
+    }
+
+    // Refuse symlink output/log destinations even when the filesystem's
+    // link-target resolution is platform-dependent (notably macOS). Staged
+    // publication must never follow or silently replace such an alias.
+    private static bool IsSymbolicLink(string path)
+    {
+        var file = new FileInfo(Path.GetFullPath(path));
+        return file.LinkTarget is not null ||
+            (file.Exists && (file.Attributes & FileAttributes.ReparsePoint) != 0);
     }
 
     private static bool SameBatchFile(string input, string output)
