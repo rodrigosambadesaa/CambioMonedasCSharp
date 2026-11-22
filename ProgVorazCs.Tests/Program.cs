@@ -306,6 +306,24 @@ try
     string csv = output.ToString();
     Check(csv.Split("OK total=2").Length - 1 == 2 && csv.Contains(",NO,"),
         "resultado de batch");
+    // An unknown batch mode must not silently become a stock-free operation.
+    using (var invalidModes = new StringReader(
+        "mode,moneda,monto,range\nx,euro,3,\naa,euro,3,\nZ,euro,3,\n" +
+        "a,euro,3,\nB,euro,3,\n"))
+    using (var modeOutput = new StringWriter())
+    {
+        service.RunBatch(invalidModes, modeOutput);
+        string[] lines = modeOutput.ToString().Split('\n',
+            StringSplitOptions.RemoveEmptyEntries);
+        Check(lines.Length == 6, "batch mode validation preserves row count");
+        for (int i = 1; i <= 3; ++i)
+            Check(lines[i].Contains(",ERROR,") &&
+                  lines[i].Contains("modo invalido"),
+                  "invalid CSV mode must be rejected: " + lines[i]);
+        for (int i = 4; i <= 5; ++i)
+            Check(!lines[i].Contains(",ERROR,"),
+                  "valid uppercase or lowercase CSV mode: " + lines[i]);
+    }
     service.ExportJson(Path.Combine(temp, "stock.json"));
     Check(File.ReadAllText(Path.Combine(temp, "stock.json")).Contains("\"nombre\": \"euro\""), "export JSON");
     service.ExportReport(Path.Combine(temp, "report.txt"));
