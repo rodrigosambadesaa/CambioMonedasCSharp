@@ -46,6 +46,22 @@ public static class EnhancedChangeEngine
             return new Answer(singleCovered, [count]);
         }
 
+        // Reduce a common monetary unit before selecting the large-amount path.
+        // Stock and coin counts remain unchanged, including for nearest change:
+        // only complete multiples of the unit are representable.
+        BigInteger unit = denominations.Aggregate(BigInteger.Zero,
+            (current, value) => BigInteger.GreatestCommonDivisor(current, value));
+        if (unit > BigInteger.One)
+        {
+            if (!nearest && amount % unit != 0)
+                return null;
+            Answer? normalized = Compute(amount / unit,
+                denominations.Select(value => value / unit).ToArray(),
+                stock, minCoins, maxCoins, nearest);
+            return normalized is null ? null
+                : new Answer(normalized.Covered * unit, normalized.Counts);
+        }
+
         // Las cantidades astronómicas no admiten DP proporcional al monto.
         // Se conserva la ruta exacta de division descendente del programa C para
         // monedas canonicas; nunca se fabrica un resultado si hay resto.
@@ -68,6 +84,7 @@ public static class EnhancedChangeEngine
                 }
                 return SolveTwoDenominations(amount, denominations, stock, minCoins, maxCoins);
             }
+
 
             // Shortest paths over residues are EXACT for unlimited stock once the
             // minimal-penalty representative fits within the requested amount.
