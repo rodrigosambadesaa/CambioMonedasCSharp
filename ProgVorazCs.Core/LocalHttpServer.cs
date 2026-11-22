@@ -35,26 +35,31 @@ public static class LocalHttpServer
     private static async Task HandleAsync(PortableServices services,
         HttpListenerContext context, CancellationToken cancel)
     {
+        // Timeout is per accepted request, not a server-wide cancellation.
+        // Otherwise a half-sent POST monopolizes the sequential listener.
+        using var requestDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancel);
+        requestDeadline.CancelAfter(TimeSpan.FromSeconds(8));
+        CancellationToken requestToken = requestDeadline.Token;
         try
         {
             string path = context.Request.Url?.AbsolutePath ?? "";
             string method = context.Request.HttpMethod;
             if (method == "GET" && path == "/health")
             {
-                await SendAsync(context.Response, 200, "text/plain; charset=utf-8", "OK", cancel);
+                await SendAsync(context.Response, 200, "text/plain; charset=utf-8", "OK", requestToken);
                 return;
             }
             if (method == "GET" && path == "/export_stock_json")
             {
                 await SendAsync(context.Response, 200, "application/json; charset=utf-8",
-                    services.StockAsJson(), cancel);
+                    services.StockAsJson(), requestToken);
                 return;
             }
             if (method == "POST" && path == "/batch")
             {
                 long length = context.Request.ContentLength64;
                 if (length < 0) {
-                    await SendAsync(context.Response, 411, "text/plain", "Length Required", cancel);
+                    await SendAsync(context.Response, 411, "text/plain", "Length Required", requestToken);
                     return;
                 }
                 if (length > MaxRequestBytes) {
@@ -68,13 +73,13 @@ public static class LocalHttpServer
                         while (pending > 0)
                         {
                             int n = await context.Request.InputStream.ReadAsync(
-                                discarded.AsMemory(0, (int)Math.Min(discarded.Length, pending)), cancel);
+                                discarded.AsMemory(0, (int)Math.Min(discarded.Length, pending)), requestToken);
                             if (n == 0) break;
                             pending -= n;
                         }
                     }
                     context.Response.KeepAlive = false;
-                    await SendAsync(context.Response, 413, "text/plain", "Payload Too Large", cancel);
+                    await SendAsync(context.Response, 413, "text/plain", "Payload Too Large", requestToken);
                     return;
                 }
                 using MemoryStream input = new();
@@ -83,9 +88,9 @@ public static class LocalHttpServer
                 while (left > 0)
                 {
                     int n = await context.Request.InputStream.ReadAsync(
-                        block.AsMemory(0, (int)Math.Min(block.Length, left)), cancel);
+                        block.AsMemory(0, (int)Math.Min(block.Length, left)), requestToken);
                     if (n == 0) throw new EndOfStreamException("Peticion HTTP incompleta.");
-                    await input.WriteAsync(block.AsMemory(0, n), cancel);
+                    await input.WriteAsync(block.AsMemory(0, n), requestToken);
                     left -= n;
                 }
                 string csv = new UTF8Encoding(false, true).GetString(input.ToArray());
@@ -93,12 +98,12 @@ public static class LocalHttpServer
                 using StringWriter writer = new();
                 services.RunBatch(reader, writer);
                 await SendAsync(context.Response, 200, "text/csv; charset=utf-8",
-                    writer.ToString(), cancel);
+                    writer.ToString(), requestToken);
                 return;
             }
-            await SendAsync(context.Response, 404, "text/plain", "Not Found", cancel);
+            await SendAsync(context.Response, 404, "text/plain", "Not Found", requestToken);
         }
-        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             // Cancellation while reading/writing a client must not leak a response.
         }
@@ -113,7 +118,7 @@ public static class LocalHttpServer
                 try
                 {
                     if (context.Response.OutputStream.CanWrite)
-                        await SendAsync(context.Response, 400, "text/plain", "Bad Request", cancel);
+                        await SendAsync(context.Response, 400, "text/plain", "Bad Request", requestToken);
                 }
                 catch (Exception sendError) when (sendError is IOException or
                     HttpListenerException or ObjectDisposedException or OperationCanceledException)
