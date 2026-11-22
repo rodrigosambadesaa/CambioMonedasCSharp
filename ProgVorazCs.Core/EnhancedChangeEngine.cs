@@ -68,21 +68,21 @@ public static class EnhancedChangeEngine
         const int maxDynamicAmount = 200_000;
         if (amount > maxDynamicAmount)
         {
-            // Exact sparse knapsack for finite inventories, independent
-            // of the numeric size of amount or coin denominations.
-            if (stock is not null && TrySparseLimitedLarge(amount, denominations,
-                stock, minCoins, maxCoins, nearest, out Answer? sparse))
-                return sparse;
-
-            // A complete enumeration of 1..4 coins is independent of the
-            // numeric magnitude. A witness at the first admissible count is
-            // provably optimal, including for noncanonical denominations.
+            // Certify short exact solutions before starting a potentially
+            // expensive inventory DP. A witness found by testing 1..4 coins
+            // in increasing order is minimal even with finite stock.
             if (!nearest)
             {
                 Answer? small = ExactUpToFourCoins(
                     amount, denominations, stock, minCoins, maxCoins);
                 if (small is not null) return small;
             }
+
+            // Exact sparse knapsack for finite inventories, independent
+            // of the numeric size of amount or coin denominations.
+            if (stock is not null && TrySparseLimitedLarge(amount, denominations,
+                stock, minCoins, maxCoins, nearest, out Answer? sparse))
+                return sparse;
 
             if (denominations.Count == 2 && denominations[0] != denominations[1])
                 return SolveTwoDenominations(amount, denominations, stock, minCoins, maxCoins);
