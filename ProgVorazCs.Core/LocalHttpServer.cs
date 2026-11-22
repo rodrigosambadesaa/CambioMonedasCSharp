@@ -25,8 +25,19 @@ public static class LocalHttpServer
                 HttpListenerContext context;
                 try { context = await listener.GetContextAsync().WaitAsync(cancel); }
                 catch (OperationCanceledException) when (cancel.IsCancellationRequested) { break; }
-                // HTTP requests are handled sequentially, as in the original server.
-                await HandleAsync(services, context, cancel);
+                // Bound a client's time in this sequential HTTP listener.
+                // Without a per-request deadline, a half-sent POST can block
+                // subsequent /health and inventory requests indefinitely.
+                int timeoutMs = 15_000;
+                string? configuredTimeout = Environment.GetEnvironmentVariable(
+                    "PROGVORAZ_HTTP_REQUEST_TIMEOUT_MS");
+                if (int.TryParse(configuredTimeout, out int parsedTimeout) &&
+                    parsedTimeout is >= 100 and <= 60_000)
+                    timeoutMs = parsedTimeout;
+                using CancellationTokenSource requestBudget =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancel);
+                requestBudget.CancelAfter(timeoutMs);
+                await HandleAsync(services, context, requestBudget.Token);
             }
         }
         finally { listener.Stop(); }

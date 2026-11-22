@@ -414,4 +414,60 @@ try
     throw new Exception("se acepto importe negativo");
 }
 catch (ArgumentOutOfRangeException) {}
+// An incomplete Content-Length POST must release the sequential listener
+// after the configured request timeout rather than blocking future clients.
+{
+    string deadlineRoot = Path.Combine(Path.GetTempPath(),
+        "csharp-http-deadline-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(deadlineRoot);
+    string? priorDeadline = Environment.GetEnvironmentVariable(
+        "PROGVORAZ_HTTP_REQUEST_TIMEOUT_MS");
+    try
+    {
+        File.Copy(Path.Combine(Directory.GetCurrentDirectory(), "monedas.txt"),
+            Path.Combine(deadlineRoot, "monedas.txt"));
+        File.Copy(Path.Combine(Directory.GetCurrentDirectory(), "stock.txt"),
+            Path.Combine(deadlineRoot, "stock.txt"));
+        using var portPicker = new System.Net.Sockets.TcpListener(
+            System.Net.IPAddress.Loopback, 0);
+        portPicker.Start();
+        int deadlinePort = ((System.Net.IPEndPoint)portPicker.LocalEndpoint).Port;
+        portPicker.Stop();
+        Environment.SetEnvironmentVariable(
+            "PROGVORAZ_HTTP_REQUEST_TIMEOUT_MS", "750");
+        using var serviceCancel = new CancellationTokenSource();
+        Task server = LocalHttpServer.ServeAsync(
+            new PortableServices(deadlineRoot), deadlinePort, serviceCancel.Token);
+        try
+        {
+            using var slow = new System.Net.Sockets.TcpClient();
+            await slow.ConnectAsync(System.Net.IPAddress.Loopback, deadlinePort);
+            byte[] incomplete = System.Text.Encoding.ASCII.GetBytes(
+                "POST /batch HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+                "Content-Length: 10000\r\nConnection: close\r\n\r\npartial");
+            await slow.GetStream().WriteAsync(incomplete);
+            using var client = new HttpClient(new HttpClientHandler { UseProxy = false })
+            {
+                Timeout = TimeSpan.FromSeconds(5)
+            };
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            string response = await client.GetStringAsync(
+                $"http://127.0.0.1:{deadlinePort}/health");
+            Check(response == "OK" && clock.Elapsed < TimeSpan.FromSeconds(4),
+                "HTTP listener remained blocked on an incomplete POST body");
+        }
+        finally
+        {
+            serviceCancel.Cancel();
+            await server;
+        }
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(
+            "PROGVORAZ_HTTP_REQUEST_TIMEOUT_MS", priorDeadline);
+        Directory.Delete(deadlineRoot, true);
+    }
+}
+
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
