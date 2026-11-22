@@ -445,6 +445,32 @@ Check(coprimeMixed is not null && coprimeMixed.Covered == 609_998 &&
       coprimeMixed.Counts.SequenceEqual([new BigInteger(11), new BigInteger(2)]),
       "cambio cercano BigInt coprimo maximiza cobertura y minimiza piezas");
 
+// The sparse exact stock engine only covers <=512 physical coins.
+// This must still produce the nearest optimal change when stock is larger.
+var stockedNearest = EnhancedChangeEngine.Compute(
+    new BigInteger(500_001),
+    [new BigInteger(50_000), new BigInteger(29_999)],
+    [new BigInteger(1000), new BigInteger(1000)], nearest: true);
+Check(stockedNearest is not null && stockedNearest.Covered == 500_000 &&
+      stockedNearest.Counts.SequenceEqual([new BigInteger(10), BigInteger.Zero]),
+      "dos denominaciones, stock>512, cercano BigInt exacto");
+
+var cappedHighNearest = EnhancedChangeEngine.Compute(
+    new BigInteger(500_001),
+    [new BigInteger(50_000), new BigInteger(29_999)],
+    [BigInteger.One, new BigInteger(513)], nearest: true);
+Check(cappedHighNearest is not null && cappedHighNearest.Covered == 499_985 &&
+      cappedHighNearest.Counts.SequenceEqual([BigInteger.One, new BigInteger(15)]),
+      "dos denominaciones, stock grande y moneda mayor limitada");
+
+var onlyLowerNearest = EnhancedChangeEngine.Compute(
+    new BigInteger(500_001),
+    [new BigInteger(50_000), new BigInteger(29_999)],
+    [BigInteger.Zero, new BigInteger(513)], nearest: true);
+Check(onlyLowerNearest is not null && onlyLowerNearest.Covered == 479_984 &&
+      onlyLowerNearest.Counts.SequenceEqual([BigInteger.Zero, new BigInteger(16)]),
+      "dos denominaciones, una agotada y stock>512");
+
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
 
 // GCD normalization must preserve optimality, inventory and nearest change
