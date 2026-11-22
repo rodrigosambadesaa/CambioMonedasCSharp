@@ -390,3 +390,27 @@ try
 }
 catch (ArgumentOutOfRangeException) {}
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
+
+// GCD normalization must preserve optimality, inventory and nearest change
+// even when the unscaled amount exceeds the regular DP threshold.
+var normalizedLarge = EnhancedChangeEngine.Compute(
+    1_400_000, [new BigInteger(800_000), new BigInteger(700_000), new BigInteger(100_000)]);
+Check(normalizedLarge is not null && normalizedLarge.Covered == 1_400_000 &&
+      normalizedLarge.TotalCoins == 2 && normalizedLarge.Counts[1] == 2,
+      "large noncanonical denomination system must beat greedy");
+
+var normalizedNearest = EnhancedChangeEngine.Compute(
+    1_400_001, [new BigInteger(800_000), new BigInteger(700_000), new BigInteger(100_000)],
+    nearest: true, maxCoins: 2);
+Check(normalizedNearest is not null && normalizedNearest.Covered == 1_400_000 &&
+      normalizedNearest.TotalCoins == 2, "closest change after common-unit normalization");
+
+var normalizedImpossible = EnhancedChangeEngine.Compute(
+    1_400_001, [new BigInteger(800_000), new BigInteger(700_000), new BigInteger(100_000)]);
+Check(normalizedImpossible is null, "non-divisible exact amount must be rejected");
+
+var normalizedStock = EnhancedChangeEngine.Compute(
+    1_400_000, [new BigInteger(800_000), new BigInteger(700_000), new BigInteger(100_000)],
+    [BigInteger.One, new BigInteger(2), BigInteger.Zero]);
+Check(normalizedStock is not null && normalizedStock.Counts[1] == 2 &&
+      normalizedStock.Counts[0] == 0, "normalized bounded change respects stock");
