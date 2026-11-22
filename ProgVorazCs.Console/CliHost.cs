@@ -86,12 +86,57 @@ public static class CliHost
             if (restore is not null) { services.Restore(restore); return 0; }
             if (args.Contains("--stream") || args.Contains("--docker") || input is not null)
             {
-                using StreamReader? reader = input is null ? null : new StreamReader(input);
-                using StreamWriter? writer = output is null ? null : new StreamWriter(output);
-                using StreamWriter? logger = log is null ? null : new StreamWriter(log, true);
-                services.RunBatch(reader ?? System.Console.In, writer ?? System.Console.Out, english, logger);
-                writer?.Flush();
-                return 0;
+                // Reject direct/relative/symlink aliases before opening any
+                // write-mode stream; never truncate a CSV we are still reading.
+                if (output is not null && (IsOperationalDestination(output, dataRoot) ||
+                        IsSymbolicLink(output)) ||
+                    log is not null && (IsOperationalDestination(log, dataRoot) ||
+                        IsSymbolicLink(log)) ||
+                    input is not null && output is not null &&
+                    SameBatchFile(input, output) ||
+                    input is not null && log is not null &&
+                    SameBatchFile(input, log) ||
+                    output is not null && log is not null &&
+                    SameBatchFile(output, log))
+                    throw new ArgumentException(
+                        "Entrada, salida y registro CSV deben usar archivos diferentes.");
+
+                // Stage both CSV output and append-only diagnostics beside
+                // their destinations. This prevents hardlink aliases from
+                // modifying the original input or the live inventory.
+                string? staged = output is null ? null :
+                    Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!,
+                        ".progvoraz-batch-" + Guid.NewGuid().ToString("N"));
+                string? stagedLog = log is null ? null :
+                    Path.Combine(Path.GetDirectoryName(Path.GetFullPath(log))!,
+                        ".progvoraz-log-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    if (stagedLog is not null && File.Exists(log))
+                        File.Copy(log!, stagedLog);
+                    using StreamReader? reader = input is null ? null : new StreamReader(input);
+                    using (StreamWriter? writer = staged is null ? null : new StreamWriter(staged))
+                    using (StreamWriter? logger = stagedLog is null ? null :
+                               new StreamWriter(stagedLog, append: true))
+                    {
+                        services.RunBatch(reader ?? System.Console.In,
+                            writer ?? System.Console.Out, english, logger);
+                        writer?.Flush();
+                        logger?.Flush();
+                    }
+                    if (staged is not null)
+                        File.Move(staged, Path.GetFullPath(output!), overwrite: true);
+                    if (stagedLog is not null)
+                        File.Move(stagedLog, Path.GetFullPath(log!), overwrite: true);
+                    return 0;
+                }
+                finally
+                {
+                    if (staged is not null && File.Exists(staged))
+                        File.Delete(staged);
+                    if (stagedLog is not null && File.Exists(stagedLog))
+                        File.Delete(stagedLog);
+                }
             }
             int specificIndex = Array.IndexOf(args, "--specific");
             if (specificIndex >= 0)
@@ -146,6 +191,39 @@ public static class CliHost
             System.Console.Error.WriteLine(error.Message);
             return 2;
         }
+    }
+
+    private static bool IsOperationalDestination(string path, string root)
+    {
+        foreach (string name in new[] {
+            "stock.txt", "monedas.txt", "historial.txt", "stock.txt.lock" })
+            if (SameBatchFile(path, Path.Combine(root, name))) return true;
+        return false;
+    }
+
+    // Refuse symlink output/log destinations even when the filesystem's
+    // link-target resolution is platform-dependent (notably macOS). Staged
+    // publication must never follow or silently replace such an alias.
+    private static bool IsSymbolicLink(string path)
+    {
+        var file = new FileInfo(Path.GetFullPath(path));
+        return file.LinkTarget is not null ||
+            (file.Exists && (file.Attributes & FileAttributes.ReparsePoint) != 0);
+    }
+
+    private static bool SameBatchFile(string input, string output)
+    {
+        string left = Path.GetFullPath(input), right = Path.GetFullPath(output);
+        StringComparison comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(left, right, comparison)) return true;
+        if (!File.Exists(left) || !File.Exists(right)) return false;
+        string resolvedLeft = File.ResolveLinkTarget(left, returnFinalTarget: true)?.FullName
+            ?? left;
+        string resolvedRight = File.ResolveLinkTarget(right, returnFinalTarget: true)?.FullName
+            ?? right;
+        return string.Equals(Path.GetFullPath(resolvedLeft),
+            Path.GetFullPath(resolvedRight), comparison);
     }
 
     private static int LaunchGui(string dataRoot)

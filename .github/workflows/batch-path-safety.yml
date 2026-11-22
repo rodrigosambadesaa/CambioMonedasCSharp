@@ -1,0 +1,24 @@
+name: C# batch data-loss regression
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  path:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build C# CLI
+        run: dotnet build ProgVorazCs.Console/ProgVorazCs.Console.csproj -c Release
+      - name: Preserve input and reject destructive output
+        run: python tests/test_batch_path_collision.py dotnet ProgVorazCs.Console/bin/Release/net10.0/ProgVorazCs.Console.dll
