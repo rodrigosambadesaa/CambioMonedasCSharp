@@ -414,4 +414,19 @@ try
     throw new Exception("se acepto importe negativo");
 }
 catch (ArgumentOutOfRangeException) {}
+var twoDenomNearest = EnhancedChangeEngine.Compute(
+    new BigInteger(500_001),
+    [new BigInteger(50_000), new BigInteger(30_000)], nearest: true);
+Check(twoDenomNearest is not null &&
+      twoDenomNearest.Covered == 500_000 &&
+      twoDenomNearest.Counts.SequenceEqual([new BigInteger(10), BigInteger.Zero]),
+      "cambio cercano BigInt de dos denominaciones debe cubrir 500000");
+
+var mixedNearest = EnhancedChangeEngine.Compute(
+    new BigInteger(610_001),
+    [new BigInteger(50_000), new BigInteger(30_000)], nearest: true);
+Check(mixedNearest is not null && mixedNearest.Covered == 610_000 &&
+      mixedNearest.Counts.SequenceEqual([new BigInteger(11), new BigInteger(2)]),
+      "cambio cercano mixto BigInt de dos denominaciones debe minimizar piezas");
+
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");

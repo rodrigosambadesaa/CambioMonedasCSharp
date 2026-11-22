@@ -59,7 +59,15 @@ public static class EnhancedChangeEngine
                 return sparse;
 
             if (denominations.Count == 2 && denominations[0] != denominations[1])
+            {
+                if (nearest && stock is null && minCoins == 0 && maxCoins is null)
+                {
+                    Answer? closest = NearestTwoDenominationsUnlimited(amount, denominations);
+                    if (closest is not null)
+                        return closest;
+                }
                 return SolveTwoDenominations(amount, denominations, stock, minCoins, maxCoins);
+            }
 
             // Shortest paths over residues are EXACT for unlimited stock once the
             // minimal-penalty representative fits within the requested amount.
@@ -326,6 +334,34 @@ public static class EnhancedChangeEngine
         if (bestCovered >= 0)
             answer = new Answer(bestCovered, Extract(bestPlan, denominations.Count));
         return true;
+    }
+
+    /// <summary>
+    /// Exact nearest amount for two unlimited positive denominations <= 50,000
+    /// with no coin-count constraints. The largest denomination alone gives
+    /// the reachable lower bound floor(amount / largest) * largest. Every
+    /// reachable value is a multiple of gcd, so at most largest/gcd exact
+    /// Diophantine candidates need consideration, independently of BigInteger size.
+    /// Other cases retain their existing solver or explicit limitations.
+    /// </summary>
+    private static Answer? NearestTwoDenominationsUnlimited(
+        BigInteger amount, IReadOnlyList<BigInteger> denominations)
+    {
+        BigInteger largest = BigInteger.Max(denominations[0], denominations[1]);
+        if (largest > 50_000) return null;
+        BigInteger gcd = BigInteger.GreatestCommonDivisor(
+            denominations[0], denominations[1]);
+        BigInteger candidate = amount - amount % gcd;
+        BigInteger guaranteed = amount / largest * largest;
+
+        while (candidate >= guaranteed && candidate > 0)
+        {
+            Answer? exact = SolveTwoDenominations(
+                candidate, denominations, null, 0, null);
+            if (exact is not null) return exact;
+            candidate -= gcd;
+        }
+        return null;
     }
 
     private static Answer? SolveTwoDenominations(BigInteger amount,
