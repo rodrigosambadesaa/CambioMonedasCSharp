@@ -86,12 +86,38 @@ public static class CliHost
             if (restore is not null) { services.Restore(restore); return 0; }
             if (args.Contains("--stream") || args.Contains("--docker") || input is not null)
             {
-                using StreamReader? reader = input is null ? null : new StreamReader(input);
-                using StreamWriter? writer = output is null ? null : new StreamWriter(output);
-                using StreamWriter? logger = log is null ? null : new StreamWriter(log, true);
-                services.RunBatch(reader ?? System.Console.In, writer ?? System.Console.Out, english, logger);
-                writer?.Flush();
-                return 0;
+                // Reject direct/relative/symlink aliases before opening any
+                // write-mode stream; never truncate a CSV we are still reading.
+                if (input is not null && output is not null &&
+                    SameBatchFile(input, output))
+                    throw new ArgumentException(
+                        "La entrada CSV y la salida son el mismo archivo; no se sobrescribe.");
+
+                // Always stage output beside its destination: if a hardlink
+                // alias cannot be identified portably, replacing a separate
+                // directory entry cannot truncate the original input inode.
+                string? staged = output is null ? null :
+                    Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!,
+                        ".progvoraz-batch-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    using StreamReader? reader = input is null ? null : new StreamReader(input);
+                    using (StreamWriter? writer = staged is null ? null : new StreamWriter(staged))
+                    using (StreamWriter? logger = log is null ? null : new StreamWriter(log, true))
+                    {
+                        services.RunBatch(reader ?? System.Console.In,
+                            writer ?? System.Console.Out, english, logger);
+                        writer?.Flush();
+                    }
+                    if (staged is not null)
+                        File.Move(staged, Path.GetFullPath(output!), overwrite: true);
+                    return 0;
+                }
+                finally
+                {
+                    if (staged is not null && File.Exists(staged))
+                        File.Delete(staged);
+                }
             }
             int specificIndex = Array.IndexOf(args, "--specific");
             if (specificIndex >= 0)
@@ -146,6 +172,21 @@ public static class CliHost
             System.Console.Error.WriteLine(error.Message);
             return 2;
         }
+    }
+
+    private static bool SameBatchFile(string input, string output)
+    {
+        string left = Path.GetFullPath(input), right = Path.GetFullPath(output);
+        StringComparison comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(left, right, comparison)) return true;
+        if (!File.Exists(left) || !File.Exists(right)) return false;
+        string resolvedLeft = File.ResolveLinkTarget(left, returnFinalTarget: true)?.FullName
+            ?? left;
+        string resolvedRight = File.ResolveLinkTarget(right, returnFinalTarget: true)?.FullName
+            ?? right;
+        return string.Equals(Path.GetFullPath(resolvedLeft),
+            Path.GetFullPath(resolvedRight), comparison);
     }
 
     private static int LaunchGui(string dataRoot)
