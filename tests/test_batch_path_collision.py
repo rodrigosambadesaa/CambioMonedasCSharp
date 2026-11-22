@@ -59,6 +59,51 @@ def main():
         check_log("relative output equals log", "shared-output.csv",
                   "./shared-output.csv", b"ORIGINAL OUTPUT\n")
 
+        # Protect persistent data, not just the CSV source being processed.
+        protected = {
+            "stock.txt": (root / "stock.txt").read_bytes(),
+            "monedas.txt": (root / "monedas.txt").read_bytes(),
+            "historial.txt": b"HISTORY-UNIQUE\n",
+            "stock.txt.lock": b"LOCK-UNIQUE\n",
+        }
+        (root / "historial.txt").write_bytes(protected["historial.txt"])
+        (root / "stock.txt.lock").write_bytes(protected["stock.txt.lock"])
+
+        for destination in protected:
+            for flag in ("--output", "--log"):
+                arguments = ["--input", "batch.csv", flag, destination]
+                result = subprocess.run(command + arguments, cwd=root,
+                                        capture_output=True, text=True, timeout=30)
+                assert result.returncode != 0, (
+                    "operational target accepted", flag, destination,
+                    result.stdout, result.stderr)
+                for name, original_content in protected.items():
+                    assert (root / name).read_bytes() == original_content, (
+                        flag, destination, name, "operational file changed")
+
+        for kind in ("symlink", "hardlink"):
+            sensitive_alias = root / ("stock-" + kind)
+            try:
+                if kind == "symlink":
+                    sensitive_alias.symlink_to(root / "stock.txt")
+                else:
+                    sensitive_alias.hardlink_to(root / "stock.txt")
+            except (OSError, NotImplementedError):
+                continue
+            for flag in ("--output", "--log"):
+                result = subprocess.run(
+                    command + ["--input", "batch.csv", flag, sensitive_alias.name],
+                    cwd=root, capture_output=True, text=True, timeout=30)
+                # Hardlink-aware platforms should reject; staged writes may
+                # safely replace the alias entry without modifying source.
+                if kind == "symlink" or native:
+                    assert result.returncode != 0, (
+                        flag, kind, result.stdout, result.stderr)
+                assert (root / "stock.txt").read_bytes() == protected["stock.txt"], (
+                    flag, kind, "stock changed")
+            if sensitive_alias.exists() or sensitive_alias.is_symlink():
+                sensitive_alias.unlink()
+
         result = subprocess.run(command + ["--input", "batch.csv", "--output", "out.csv"],
                                 cwd=root, capture_output=True, text=True, timeout=30)
         assert result.returncode == 0, (result.stdout, result.stderr)
