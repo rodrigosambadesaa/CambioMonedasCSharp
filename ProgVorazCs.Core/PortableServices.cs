@@ -64,8 +64,44 @@ public sealed class PortableServices
             new JsonSerializerOptions { WriteIndented = true });
     }
 
+    // Never allow an export or backup to replace ledger, currency tables,
+    // history or the sidecar lock. Resolve symlink targets before writing.
+    // Always stage output before replacing the destination, which also avoids
+    // corrupting the source through hardlink aliases and on write failures.
+    private void WriteExportAtomically(string filename, Action<string> write)
+    {
+        string target = Path.GetFullPath(filename);
+        StringComparison comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        string resolved = File.Exists(target)
+            ? File.ResolveLinkTarget(target, returnFinalTarget: true)?.FullName ?? target
+            : target;
+        foreach (string protectedName in new[] {
+            "stock.txt", "monedas.txt", "historial.txt", "stock.txt.lock" })
+        {
+            string original = Path.Combine(root, protectedName);
+            if (string.Equals(target, original, comparison) ||
+                string.Equals(Path.GetFullPath(resolved), original, comparison))
+                throw new ArgumentException(
+                    "Destino de exportación reservado para datos operativos.", nameof(filename));
+        }
+
+        string staging = Path.Combine(Path.GetDirectoryName(target)!,
+            ".progvoraz-export-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            write(staging);
+            File.Move(staging, target, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(staging)) File.Delete(staging);
+        }
+    }
+
     public void ExportJson(string filename) =>
-        File.WriteAllText(filename, StockAsJson(), new UTF8Encoding(false));
+        WriteExportAtomically(filename, stage =>
+            File.WriteAllText(stage, StockAsJson(), new UTF8Encoding(false)));
 
     public IReadOnlyList<string> History(int limit = 100)
     {
@@ -92,22 +128,26 @@ public sealed class PortableServices
 
     public void ExportReport(string filename)
     {
-        using StreamWriter writer = new(filename, false, new UTF8Encoding(false));
-        writer.WriteLine("REPORTE GLOBAL DE INVENTARIO");
-        foreach (string name in repository.LoadCurrencyNames())
+        WriteExportAtomically(filename, stage =>
         {
-            if (!Validate(name)) continue;
-            CurrencyData c = repository.LoadCurrency(name)!;
-            writer.WriteLine(name + " | denominaciones=" + c.Denominations.Count
-                + " | piezas=" + c.Stock.Aggregate(BigInteger.Zero, (a,b) => a + b)
-                + " | valor_centimos=" + c.Denominations.Zip(c.Stock, (d,s) => d*s)
-                    .Aggregate(BigInteger.Zero, (a,b) => a + b));
-        }
+            using StreamWriter writer = new(stage, false, new UTF8Encoding(false));
+            writer.WriteLine("REPORTE GLOBAL DE INVENTARIO");
+            foreach (string name in repository.LoadCurrencyNames())
+            {
+                if (!Validate(name)) continue;
+                CurrencyData c = repository.LoadCurrency(name)!;
+                writer.WriteLine(name + " | denominaciones=" + c.Denominations.Count
+                    + " | piezas=" + c.Stock.Aggregate(BigInteger.Zero, (a,b) => a + b)
+                    + " | valor_centimos=" + c.Denominations.Zip(c.Stock, (d,s) => d*s)
+                        .Aggregate(BigInteger.Zero, (a,b) => a + b));
+            }
+        });
     }
 
     public void Snapshot(string destination)
     {
-        File.Copy(Path.Combine(root, "stock.txt"), destination, overwrite: true);
+        WriteExportAtomically(destination,
+            stage => File.Copy(Path.Combine(root, "stock.txt"), stage));
     }
 
     public void Restore(string source)
