@@ -414,6 +414,37 @@ try
     throw new Exception("se acepto importe negativo");
 }
 catch (ArgumentOutOfRangeException) {}
+// GCD=1: normalization cannot rescue this noncanonical exact change.
+// Greedy needs 100,000 pieces; the mathematically optimal result needs two.
+var noncanonicalGcdOne = new BigInteger[] { 800001, 700000, 100001, 1 };
+var optimizedTwo = EnhancedChangeEngine.Compute(1_400_000, noncanonicalGcdOne);
+Check(optimizedTwo is not null && optimizedTwo.TotalCoins == 2 &&
+      optimizedTwo.Counts.SequenceEqual(new BigInteger[] { 0, 2, 0, 0 }),
+      "noncanonical GCD=1 large exact change must use two 700000 coins");
+
+var optimizedStock = EnhancedChangeEngine.Compute(1_400_000,
+    noncanonicalGcdOne, new BigInteger[] { 100, 2, 100, 100 });
+Check(optimizedStock is not null && optimizedStock.TotalCoins == 2 &&
+      optimizedStock.Counts.SequenceEqual(new BigInteger[] { 0, 2, 0, 0 }),
+      "noncanonical exact two pieces with finite inventory");
+
+var optimizedRestrictedStock = EnhancedChangeEngine.Compute(1_400_000,
+    noncanonicalGcdOne, new BigInteger[] { 100, 1, 100, 100 });
+Check(optimizedRestrictedStock is not null && optimizedRestrictedStock.TotalCoins > 2,
+      "limited stock forbids reuse of the only 700000 coin");
+
+var threeCoinsWitness = EnhancedChangeEngine.Compute(2_100_000,
+    noncanonicalGcdOne, maxCoins: 3);
+Check(threeCoinsWitness is not null && threeCoinsWitness.TotalCoins == 3 &&
+      threeCoinsWitness.Counts[1] == 3,
+      "three-piece optimality proven for huge noncanonical amount");
+
+var fourCoinsWitness = EnhancedChangeEngine.Compute(2_800_000,
+    noncanonicalGcdOne, maxCoins: 4);
+Check(fourCoinsWitness is not null && fourCoinsWitness.TotalCoins == 4 &&
+      fourCoinsWitness.Counts[1] == 4,
+      "four-piece optimality proven for huge noncanonical amount");
+
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
 
 // GCD normalization must preserve optimality, inventory and nearest change

@@ -74,6 +74,16 @@ public static class EnhancedChangeEngine
                 stock, minCoins, maxCoins, nearest, out Answer? sparse))
                 return sparse;
 
+            // A complete enumeration of 1..4 coins is independent of the
+            // numeric magnitude. A witness at the first admissible count is
+            // provably optimal, including for noncanonical denominations.
+            if (!nearest)
+            {
+                Answer? small = ExactUpToFourCoins(
+                    amount, denominations, stock, minCoins, maxCoins);
+                if (small is not null) return small;
+            }
+
             if (denominations.Count == 2 && denominations[0] != denominations[1])
                 return SolveTwoDenominations(amount, denominations, stock, minCoins, maxCoins);
 
@@ -342,6 +352,82 @@ public static class EnhancedChangeEngine
         if (bestCovered >= 0)
             answer = new Answer(bestCovered, Extract(bestPlan, denominations.Count));
         return true;
+    }
+
+    /// <summary>
+    /// Certifies the minimum count if a change exists with at most four pieces.
+    /// Two-piece sums make three/four-piece searches quadratic, not quartic.
+    /// A null result is inconclusive (never proof that change is impossible).
+    /// No amount-sized allocations, even for enormous BigInteger amounts.
+    /// </summary>
+    private static Answer? ExactUpToFourCoins(BigInteger amount,
+        IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger>? stock,
+        int minCoins, int? maxCoins)
+    {
+        int n = denominations.Count;
+        if (n == 0 || n > 64 || minCoins > 4 || maxCoins == 0)
+            return null;
+        int limit = Math.Min(4, maxCoins ?? 4);
+
+        bool Available(params int[] indices)
+        {
+            if (stock is null) return true;
+            for (int i = 0; i < indices.Length; i++)
+            {
+                int used = 1;
+                for (int j = i + 1; j < indices.Length; j++)
+                    if (indices[j] == indices[i]) used++;
+                if (stock[indices[i]] < used) return false;
+            }
+            return true;
+        }
+
+        Answer Result(params int[] indices)
+        {
+            var counts = new BigInteger[n];
+            foreach (int i in indices) counts[i]++;
+            return new Answer(amount, counts);
+        }
+
+        if (minCoins <= 1 && limit >= 1)
+            for (int i = 0; i < n; i++)
+                if (denominations[i] == amount && Available(i))
+                    return Result(i);
+
+        var pairs = new Dictionary<BigInteger, List<(int I, int J)>>();
+        if (limit < 2) return null;
+        for (int i = 0; i < n; i++)
+            for (int j = i; j < n; j++)
+            {
+                if (!Available(i, j)) continue;
+                BigInteger sum = denominations[i] + denominations[j];
+                if (sum > amount) continue;
+                if (minCoins <= 2 && sum == amount) return Result(i, j);
+                if (!pairs.TryGetValue(sum, out var entries))
+                    pairs[sum] = entries = [];
+                entries.Add((i, j));
+            }
+
+        if (limit >= 3 && minCoins <= 3)
+            for (int i = 0; i < n; i++)
+            {
+                BigInteger complement = amount - denominations[i];
+                if (!pairs.TryGetValue(complement, out var entries)) continue;
+                foreach (var (a, b) in entries)
+                    if (Available(i, a, b))
+                        return Result(i, a, b);
+            }
+
+        if (limit >= 4 && minCoins <= 4)
+            foreach (var (sum, entries) in pairs)
+            {
+                if (!pairs.TryGetValue(amount - sum, out var opposite)) continue;
+                foreach (var (a, b) in entries)
+                    foreach (var (c, d) in opposite)
+                        if (Available(a, b, c, d))
+                            return Result(a, b, c, d);
+            }
+        return null;
     }
 
     private static Answer? SolveTwoDenominations(BigInteger amount,
