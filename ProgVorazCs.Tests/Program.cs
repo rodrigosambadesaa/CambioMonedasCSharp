@@ -108,6 +108,21 @@ Match(0, [4,3,1], null, 0, null, true, 0);
 Match(BigInteger.Parse("99999999999999999999999999999999999"), [5,1], null, 0, null, true);
 // For a non-canonical system greedy would return 50003 pieces: 50001 x 4 + 2 x 1.
 // The globally optimal solution is 50000 x 4 + 2 x 3 = 50002 pieces.
+var mediumTwoRanged = EnhancedChangeEngine.Compute(40_000,
+    [new BigInteger(20_000), new BigInteger(10_000)],
+    minCoins: 3, maxCoins: 3);
+Check(mediumTwoRanged?.Counts.SequenceEqual([BigInteger.One, new BigInteger(2)]) == true,
+    "medium two-denomination positive minimum must find nonminimal solution");
+var mediumTwoStocked = EnhancedChangeEngine.Compute(40_000,
+    [new BigInteger(20_000), new BigInteger(10_000)],
+    [BigInteger.One, new BigInteger(2)], minCoins: 3, maxCoins: 3);
+Check(mediumTwoStocked?.Counts.SequenceEqual([BigInteger.One, new BigInteger(2)]) == true,
+    "medium two-denomination positive minimum respects stock");
+Check(EnhancedChangeEngine.Compute(40_000,
+    [new BigInteger(20_000), new BigInteger(10_000)],
+    [BigInteger.One, new BigInteger(2)], minCoins: 4, maxCoins: 4) is null,
+    "medium two-denomination impossible four-piece limited range");
+
 var nonCanonicalLarge = EnhancedChangeEngine.Compute(
     200_006, [new BigInteger(4),new BigInteger(3),BigInteger.One]);
 Check(nonCanonicalLarge?.TotalCoins == 50_002, "residue Dijkstra must beat greedy for large change");
