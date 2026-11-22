@@ -59,7 +59,16 @@ public static class EnhancedChangeEngine
                 return sparse;
 
             if (denominations.Count == 2 && denominations[0] != denominations[1])
+            {
+                // The Diophantine exact solver alone would incorrectly report
+                // no closest change for a non-divisible amount.
+                if (nearest && stock is null && minCoins == 0 && maxCoins is null)
+                {
+                    Answer? closest = NearestTwoUnlimitedLarge(amount, denominations);
+                    if (closest is not null) return closest;
+                }
                 return SolveTwoDenominations(amount, denominations, stock, minCoins, maxCoins);
+            }
 
             // Shortest paths over residues are EXACT for unlimited stock once the
             // minimal-penalty representative fits within the requested amount.
@@ -326,6 +335,38 @@ public static class EnhancedChangeEngine
         if (bestCovered >= 0)
             answer = new Answer(bestCovered, Extract(bestPlan, denominations.Count));
         return true;
+    }
+
+    /// <summary>
+    /// Exact closest change for two different small denominations and
+    /// unrestricted inventory/coin count, including 10,000-digit amounts.
+    /// For each high-coin residue class modulo low/gcd(high,low), determine
+    /// the minimum difference from the requested amount. Then use the
+    /// Diophantine solver to minimize coins at that maximum payable sum.
+    /// Time complexity O(low/gcd), independent of the requested amount.
+    /// </summary>
+    private static Answer? NearestTwoUnlimitedLarge(
+        BigInteger amount, IReadOnlyList<BigInteger> denominations)
+    {
+        BigInteger highBig = BigInteger.Max(denominations[0], denominations[1]);
+        BigInteger lowBig = BigInteger.Min(denominations[0], denominations[1]);
+        if (lowBig <= 0 || highBig > 50_000) return null;
+        long high = (long)highBig, low = (long)lowBig;
+        long gcd = (long)BigInteger.GreatestCommonDivisor(highBig, lowBig);
+        long period = low / gcd;
+        long residue = (long)(amount % low);
+        long bestGap = low;
+        for (long x = 0; x < period; ++x)
+        {
+            long gap = (residue + low - ((high * x) % low)) % low;
+            if (gap >= bestGap || amount < high * x + gap ||
+                amount == gap) continue;
+            bestGap = gap;
+            if (bestGap == 0) break;
+        }
+        if (bestGap == low) return null;
+        return SolveTwoDenominations(amount - bestGap, denominations,
+                                     null, 0, null);
     }
 
     private static Answer? SolveTwoDenominations(BigInteger amount,
