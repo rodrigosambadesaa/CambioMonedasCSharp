@@ -183,6 +183,18 @@ Check(astronomicalNonCanonical is not null &&
 
 var nearest = EnhancedChangeEngine.Compute(11, [new BigInteger(6), new BigInteger(4)], nearest: true);
 Check(nearest?.Covered == 10, "importe cercano incorrecto");
+var nearTwoBig = EnhancedChangeEngine.Compute(200_001,
+    [new BigInteger(50_000), new BigInteger(30_000)], nearest: true);
+Check(nearTwoBig?.Covered == 200_000 &&
+    nearTwoBig.Counts.SequenceEqual([new BigInteger(4), BigInteger.Zero]),
+    "two-denomination closest BigInt must not require exact requested amount");
+var nearTwoAstronomical = EnhancedChangeEngine.Compute(
+    BigInteger.Pow(10, 40) + 1,
+    [new BigInteger(50_000), new BigInteger(30_000)], nearest: true);
+Check(nearTwoAstronomical?.Covered == BigInteger.Pow(10, 40) &&
+    nearTwoAstronomical.TotalCoins == BigInteger.Pow(10, 40) / 50_000,
+    "astronomical two-denomination nearest uses minimal coins");
+
 var unreachableNear = EnhancedChangeEngine.Compute(150_000,
     [new BigInteger(200_001)], nearest: true);
 Check(unreachableNear is null, "cercano sin cambio no nulo");
