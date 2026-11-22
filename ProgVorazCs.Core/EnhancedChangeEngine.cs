@@ -29,6 +29,26 @@ public static class EnhancedChangeEngine
             return minCoins == 0 && !nearest
                 ? new Answer(BigInteger.Zero, new BigInteger[denominations.Count]) : null;
 
+        // One coin is also solvable exactly across any number of
+        // denominations. On large amounts, the fallback to exact change
+        // incorrectly rejects a valid closest smaller denomination.
+        if (nearest && maxCoins == 1)
+        {
+            int bestIndex = -1;
+            for (int i = 0; i < denominations.Count; ++i)
+            {
+                if (denominations[i] > amount ||
+                    stock is not null && stock[i].IsZero)
+                    continue;
+                if (bestIndex < 0 || denominations[i] > denominations[bestIndex])
+                    bestIndex = i;
+            }
+            if (bestIndex < 0) return null;
+            BigInteger[] counts = new BigInteger[denominations.Count];
+            counts[bestIndex] = BigInteger.One;
+            return new Answer(denominations[bestIndex], counts);
+        }
+
         // A single denomination has a closed-form optimum even for amounts
         // larger than Int32/UInt64. The closest-change path must enforce both
         // stock and coin-count bounds instead of falling back to exact change.
