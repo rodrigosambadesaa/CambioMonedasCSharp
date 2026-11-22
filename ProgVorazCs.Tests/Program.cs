@@ -324,6 +324,27 @@ try
     Check(service.Repository.LoadStock("euro")![0] == 4 &&
         service.Repository.LoadStock("dolar")![0] == 1,
         "restauracion invalida no modifica ninguna divisa");
+    // Reject duplicate, unknown and malformed currency blocks atomically.
+    string[] invalidSections = [
+        "euro\n1\n2\n3\neuro\n9\n9\n9\ndolar\n1\n2\n",
+        "euro\n1\n2\n3\ndolar\n1\n2\ndolar\n9\n9\n",
+        "euro\n1\n2\n3\ndolar\n1\n2\nextra\n9\n",
+        "euro\n1\n2\n3\ndolar\n1\n2\n-2\n",
+    ];
+    foreach (string malformed in invalidSections)
+    {
+        File.WriteAllText(damaged, malformed);
+        try
+        {
+            service.Restore(damaged);
+            throw new Exception("Snapshot con secciones ambiguas aceptado.");
+        }
+        catch (InvalidDataException) { }
+        Check(service.Repository.LoadStock("euro")![0] == 4 &&
+              service.Repository.LoadStock("dolar")![0] == 1,
+              "Snapshot malformado modificó stock");
+    }
+
 
 
     // HTTP local parity: health, stock JSON, batch CSV, 404 y request demasiado grande.

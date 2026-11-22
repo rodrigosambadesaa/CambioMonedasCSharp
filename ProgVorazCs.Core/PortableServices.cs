@@ -125,11 +125,22 @@ public sealed class PortableServices
             try
             {
                 File.Copy(sourceFull, staging);
-                foreach (string name in repository.LoadCurrencyNames())
+                // Parse every section exactly once; rejecting duplicate/unknown
+                // currencies prevents valid-looking prefixes from masking
+                // injected or ambiguous inventory blocks.
+                var snapshot = ReadStockSnapshot(staging);
+                string[] known = repository.LoadCurrencyNames().ToArray();
+                var expected = known.Select(TextKey.Normalize)
+                    .ToHashSet(StringComparer.Ordinal);
+                if (snapshot.Count != expected.Count ||
+                    snapshot.Keys.Any(key => !expected.Contains(key)))
+                    throw new InvalidDataException("Divisas inesperadas o faltantes en snapshot.");
+                foreach (string name in known)
                 {
-                    List<BigInteger>? candidate = ReadNumbers(staging, name, true);
+                    if (!snapshot.TryGetValue(TextKey.Normalize(name), out var candidate))
+                        throw new InvalidDataException("Falta la divisa " + name);
                     List<BigInteger>? denominations = repository.LoadDenominations(name);
-                    if (candidate is null || denominations is null ||
+                    if (denominations is null ||
                         candidate.Count != denominations.Count || candidate.Any(x => x < 0))
                         throw new InvalidDataException("Snapshot inconsistente para " + name);
                 }
@@ -143,20 +154,35 @@ public sealed class PortableServices
         });
     }
 
-    private static List<BigInteger>? ReadNumbers(string path, string key, bool normalizeMinusOne)
+    // Whole-file validation, unlike searching for the first matching header.
+    // The old parser silently accepted duplicate and unrecognized sections.
+    private static Dictionary<string, List<BigInteger>> ReadStockSnapshot(string path)
     {
-        string[] tokens = File.ReadAllText(path).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        int start = Array.FindIndex(tokens, x => TextKey.Normalize(x) == TextKey.Normalize(key));
-        if (start < 0) return null;
-        List<BigInteger> result = [];
-        for (int i = start + 1; i < tokens.Length; i++)
+        string[] tokens = File.ReadAllText(path).Split(
+            (char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var sections = new Dictionary<string, List<BigInteger>>(StringComparer.Ordinal);
+        string? current = null;
+        foreach (string token in tokens)
         {
-            if (normalizeMinusOne && tokens[i] == "-1") { result.Add(BigInteger.Zero); continue; }
-            if (!BigInteger.TryParse(tokens[i], NumberStyles.None, CultureInfo.InvariantCulture, out var value))
-                break;
-            result.Add(value);
+            bool legacyZero = token == "-1";
+            if (legacyZero || BigInteger.TryParse(token, NumberStyles.None,
+                    CultureInfo.InvariantCulture, out _))
+            {
+                if (current is null)
+                    throw new InvalidDataException("Valor antes de cualquier divisa.");
+                BigInteger quantity = legacyZero ? BigInteger.Zero :
+                    BigInteger.Parse(token, NumberStyles.None, CultureInfo.InvariantCulture);
+                sections[current].Add(quantity);
+            }
+            else
+            {
+                string key = TextKey.Normalize(token);
+                if (!sections.TryAdd(key, []))
+                    throw new InvalidDataException("Divisa repetida en snapshot: " + key);
+                current = key;
+            }
         }
-        return result;
+        return sections;
     }
 
     public void RunBatch(TextReader input, TextWriter output, bool english = false, TextWriter? log = null)
