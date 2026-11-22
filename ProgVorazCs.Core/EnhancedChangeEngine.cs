@@ -95,7 +95,18 @@ public static class EnhancedChangeEngine
                 return sparse;
 
             if (denominations.Count == 2 && denominations[0] != denominations[1])
+            {
+                if (nearest && minCoins == 0 && maxCoins is null)
+                {
+                    Answer? closest = stock is null
+                        ? NearestTwoDenominationsUnlimited(amount, denominations)
+                        : NearestTwoDenominationsWithStock(amount, denominations, stock);
+                    if (closest is not null)
+                        return closest;
+                }
                 return SolveTwoDenominations(amount, denominations, stock, minCoins, maxCoins);
+            }
+
 
             // Shortest paths over residues are EXACT for unlimited stock once the
             // minimal-penalty representative fits within the requested amount.
@@ -362,6 +373,91 @@ public static class EnhancedChangeEngine
         if (bestCovered >= 0)
             answer = new Answer(bestCovered, Extract(bestPlan, denominations.Count));
         return true;
+    }
+
+    /// <summary>
+    /// Exact nearest amount for two unlimited positive denominations <= 50,000
+    /// with no coin-count constraints. The largest denomination alone gives
+    /// the reachable lower bound floor(amount / largest) * largest. Every
+    /// reachable value is a multiple of gcd, so at most largest/gcd exact
+    /// Diophantine candidates need consideration, independently of BigInteger size.
+    /// Other cases retain their existing solver or explicit limitations.
+    /// </summary>
+    private static Answer? NearestTwoDenominationsUnlimited(
+        BigInteger amount, IReadOnlyList<BigInteger> denominations)
+    {
+        BigInteger largest = BigInteger.Max(denominations[0], denominations[1]);
+        if (largest > 50_000) return null;
+        BigInteger gcd = BigInteger.GreatestCommonDivisor(
+            denominations[0], denominations[1]);
+        BigInteger candidate = amount - amount % gcd;
+        BigInteger guaranteed = amount / largest * largest;
+
+        while (candidate >= guaranteed && candidate > 0)
+        {
+            Answer? exact = SolveTwoDenominations(
+                candidate, denominations, null, 0, null);
+            if (exact is not null) return exact;
+            candidate -= gcd;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Exact closest change with two denominations and finite arbitrary-size
+    /// stock, without explicit coin-count bounds. For the smaller coin b,
+    /// quantities in the same class modulo a/gcd(a,b) have the same remainder.
+    /// Within each class, the amount grows while the larger-coin stock is
+    /// saturated, then stays constant after the cap is lifted. Thus only the
+    /// transition's two neighboring quantities can be optimal.
+    /// Complexity O(larger denomination/gcd), irrespective of the stock size.
+    /// </summary>
+    private static Answer? NearestTwoDenominationsWithStock(
+        BigInteger amount, IReadOnlyList<BigInteger> denominations,
+        IReadOnlyList<BigInteger> stock)
+    {
+        int high = denominations[0] > denominations[1] ? 0 : 1;
+        int low = 1 - high;
+        BigInteger a = denominations[high], b = denominations[low];
+        if (a > 50_000) return null;
+        int period = (int)(a / BigInteger.GreatestCommonDivisor(a, b));
+        BigInteger maximumY = BigInteger.Min(stock[low], amount / b);
+        BigInteger saturatedThrough = amount >= a * stock[high]
+            ? (amount - a * stock[high]) / b
+            : -BigInteger.One;
+        Answer? best = null;
+
+        void Consider(BigInteger y)
+        {
+            if (y < 0 || y > maximumY) return;
+            BigInteger x = BigInteger.Min(stock[high], (amount - b * y) / a);
+            BigInteger covered = a * x + b * y;
+            if (covered <= 0) return;
+            BigInteger coins = x + y;
+            if (best is not null &&
+                (covered < best.Covered ||
+                 covered == best.Covered && coins >= best.TotalCoins))
+                return;
+            BigInteger[] counts = new BigInteger[2];
+            counts[high] = x;
+            counts[low] = y;
+            best = new Answer(covered, counts);
+        }
+
+        for (int residue = 0; residue < period && residue <= maximumY; residue++)
+        {
+            BigInteger first = residue;
+            BigInteger saturatedLimit = BigInteger.Min(maximumY, saturatedThrough);
+            if (saturatedLimit >= first)
+                Consider(first + (saturatedLimit - first) / period * period);
+
+            BigInteger uncapped = saturatedThrough < first
+                ? first
+                : first + ((saturatedThrough - first) / period + 1) * period;
+            if (uncapped <= maximumY)
+                Consider(uncapped);
+        }
+        return best;
     }
 
     private static Answer? SolveTwoDenominations(BigInteger amount,
