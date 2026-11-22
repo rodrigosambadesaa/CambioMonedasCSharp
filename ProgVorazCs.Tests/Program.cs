@@ -382,6 +382,22 @@ try
                 await network.WriteAsync(partial);
                 halfClosed.Client.Shutdown(System.Net.Sockets.SocketShutdown.Send);
             }
+            // Hold a partial POST open without FIN or RST. The listener used
+            // to await the remaining body indefinitely, starving /health.
+            using (var stalled = new System.Net.Sockets.TcpClient())
+            {
+                await stalled.ConnectAsync(System.Net.IPAddress.Loopback, port);
+                byte[] incompleteBody = System.Text.Encoding.ASCII.GetBytes(
+                    "POST /batch HTTP/1.1\r\nHost: 127.0.0.1\r\n" +
+                    "Content-Length: 1000\r\nConnection: close\r\n\r\npartial");
+                await stalled.GetStream().WriteAsync(incompleteBody);
+                await Task.Delay(150);
+                using var requestLimit = new CancellationTokenSource(TimeSpan.FromSeconds(14));
+                using var stopwatchResponse = await client.GetAsync(url + "/health", requestLimit.Token);
+                Check(stopwatchResponse.IsSuccessStatusCode,
+                    "HTTP listener must recover from a stalled request body");
+            }
+
             Check(await client.GetStringAsync(url + "/health") == "OK",
                 "HTTP listener survived orderly half-closed request bodies");
             using (var finalCheck = await client.GetAsync(url + "/health"))
