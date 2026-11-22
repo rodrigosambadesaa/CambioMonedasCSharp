@@ -40,6 +40,15 @@ public static class LocalHttpServer
         using var requestDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancel);
         requestDeadline.CancelAfter(TimeSpan.FromSeconds(8));
         CancellationToken requestToken = requestDeadline.Token;
+        // HttpListener's request stream may not honour cancellation while
+        // waiting for a peer to send more bytes. Explicitly abort the response
+        // so its native pending read can be released as well.
+        using var abortOnTimeout = requestToken.Register(() =>
+        {
+            try { context.Response.Abort(); }
+            catch (HttpListenerException) { }
+            catch (ObjectDisposedException) { }
+        });
         try
         {
             string path = context.Request.Url?.AbsolutePath ?? "";
@@ -73,7 +82,8 @@ public static class LocalHttpServer
                         while (pending > 0)
                         {
                             int n = await context.Request.InputStream.ReadAsync(
-                                discarded.AsMemory(0, (int)Math.Min(discarded.Length, pending)), requestToken);
+                                discarded.AsMemory(0, (int)Math.Min(discarded.Length, pending)), requestToken)
+                                .AsTask().WaitAsync(requestToken);
                             if (n == 0) break;
                             pending -= n;
                         }
@@ -88,7 +98,8 @@ public static class LocalHttpServer
                 while (left > 0)
                 {
                     int n = await context.Request.InputStream.ReadAsync(
-                        block.AsMemory(0, (int)Math.Min(block.Length, left)), requestToken);
+                        block.AsMemory(0, (int)Math.Min(block.Length, left)), requestToken)
+                        .AsTask().WaitAsync(requestToken);
                     if (n == 0) throw new EndOfStreamException("Peticion HTTP incompleta.");
                     await input.WriteAsync(block.AsMemory(0, n), requestToken);
                     left -= n;
