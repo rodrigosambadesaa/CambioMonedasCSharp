@@ -82,6 +82,14 @@ public static class EnhancedChangeEngine
                 : new Answer(normalized.Covered * unit, normalized.Counts);
         }
 
+        // The ordinary amount-only DP retains just the shortest answer;
+        // a positive lower bound can require a longer valid composition.
+        // Use the exact Diophantine solver for two distinct denominations.
+        if (!nearest && denominations.Count == 2 &&
+            denominations[0] != denominations[1] && minCoins > 0)
+            return SolveTwoDenominations(amount, denominations, stock,
+                                         minCoins, maxCoins);
+
         // Las cantidades astronómicas no admiten DP proporcional al monto.
         // Se conserva la ruta exacta de division descendente del programa C para
         // monedas canonicas; nunca se fabrica un resultado si hay resto.
