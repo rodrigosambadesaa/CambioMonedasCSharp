@@ -88,7 +88,9 @@ public static class CliHost
             {
                 // Reject direct/relative/symlink aliases before opening any
                 // write-mode stream; never truncate a CSV we are still reading.
-                if (input is not null && output is not null &&
+                if (output is not null && IsOperationalDestination(output, dataRoot) ||
+                    log is not null && IsOperationalDestination(log, dataRoot) ||
+                    input is not null && output is not null &&
                     SameBatchFile(input, output) ||
                     input is not null && log is not null &&
                     SameBatchFile(input, log) ||
@@ -97,30 +99,41 @@ public static class CliHost
                     throw new ArgumentException(
                         "Entrada, salida y registro CSV deben usar archivos diferentes.");
 
-                // Always stage output beside its destination: if a hardlink
-                // alias cannot be identified portably, replacing a separate
-                // directory entry cannot truncate the original input inode.
+                // Stage both CSV output and append-only diagnostics beside
+                // their destinations. This prevents hardlink aliases from
+                // modifying the original input or the live inventory.
                 string? staged = output is null ? null :
                     Path.Combine(Path.GetDirectoryName(Path.GetFullPath(output))!,
                         ".progvoraz-batch-" + Guid.NewGuid().ToString("N"));
+                string? stagedLog = log is null ? null :
+                    Path.Combine(Path.GetDirectoryName(Path.GetFullPath(log))!,
+                        ".progvoraz-log-" + Guid.NewGuid().ToString("N"));
                 try
                 {
+                    if (stagedLog is not null && File.Exists(log))
+                        File.Copy(log!, stagedLog);
                     using StreamReader? reader = input is null ? null : new StreamReader(input);
                     using (StreamWriter? writer = staged is null ? null : new StreamWriter(staged))
-                    using (StreamWriter? logger = log is null ? null : new StreamWriter(log, true))
+                    using (StreamWriter? logger = stagedLog is null ? null :
+                               new StreamWriter(stagedLog, append: true))
                     {
                         services.RunBatch(reader ?? System.Console.In,
                             writer ?? System.Console.Out, english, logger);
                         writer?.Flush();
+                        logger?.Flush();
                     }
                     if (staged is not null)
                         File.Move(staged, Path.GetFullPath(output!), overwrite: true);
+                    if (stagedLog is not null)
+                        File.Move(stagedLog, Path.GetFullPath(log!), overwrite: true);
                     return 0;
                 }
                 finally
                 {
                     if (staged is not null && File.Exists(staged))
                         File.Delete(staged);
+                    if (stagedLog is not null && File.Exists(stagedLog))
+                        File.Delete(stagedLog);
                 }
             }
             int specificIndex = Array.IndexOf(args, "--specific");
@@ -176,6 +189,14 @@ public static class CliHost
             System.Console.Error.WriteLine(error.Message);
             return 2;
         }
+    }
+
+    private static bool IsOperationalDestination(string path, string root)
+    {
+        foreach (string name in new[] {
+            "stock.txt", "monedas.txt", "historial.txt", "stock.txt.lock" })
+            if (SameBatchFile(path, Path.Combine(root, name))) return true;
+        return false;
     }
 
     private static bool SameBatchFile(string input, string output)
