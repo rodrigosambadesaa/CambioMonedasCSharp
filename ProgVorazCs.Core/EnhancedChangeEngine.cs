@@ -29,6 +29,23 @@ public static class EnhancedChangeEngine
             return minCoins == 0 && !nearest
                 ? new Answer(BigInteger.Zero, new BigInteger[denominations.Count]) : null;
 
+        // A single denomination has a closed-form optimum even for amounts
+        // larger than Int32/UInt64. The closest-change path must enforce both
+        // stock and coin-count bounds instead of falling back to exact change.
+        if (denominations.Count == 1)
+        {
+            BigInteger count = amount / denominations[0];
+            if (stock is not null)
+                count = BigInteger.Min(count, stock[0]);
+            if (maxCoins.HasValue)
+                count = BigInteger.Min(count, maxCoins.Value);
+            BigInteger singleCovered = count * denominations[0];
+            if (count < minCoins || nearest && singleCovered == 0 ||
+                !nearest && singleCovered != amount)
+                return null;
+            return new Answer(singleCovered, [count]);
+        }
+
         // Reduce a common monetary unit before selecting the large-amount path.
         // Stock and coin counts remain unchanged, including for nearest change:
         // only complete multiples of the unit are representable.
