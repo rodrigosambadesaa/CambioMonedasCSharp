@@ -415,3 +415,37 @@ try
 }
 catch (ArgumentOutOfRangeException) {}
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
+
+
+// A one-coin closest-change limit must be exact even when the requested amount
+// is above the DP threshold and the currency has several denominations.
+var oneCoinNearestLarge = EnhancedChangeEngine.Compute(
+    700_001, [new BigInteger(500_000), new BigInteger(300_000), BigInteger.One],
+    maxCoins: 1, nearest: true);
+Check(oneCoinNearestLarge is not null &&
+      oneCoinNearestLarge.Covered == 500_000 &&
+      oneCoinNearestLarge.Counts.SequenceEqual(
+          [BigInteger.One, BigInteger.Zero, BigInteger.Zero]),
+      "closest one-coin BigInt amount must select largest eligible denomination");
+
+var oneCoinStockLarge = EnhancedChangeEngine.Compute(
+    700_001, [new BigInteger(500_000), new BigInteger(300_000), BigInteger.One],
+    [BigInteger.Zero, BigInteger.One, new BigInteger(10)],
+    maxCoins: 1, nearest: true);
+Check(oneCoinStockLarge is not null &&
+      oneCoinStockLarge.Covered == 300_000 &&
+      oneCoinStockLarge.Counts.SequenceEqual(
+          [BigInteger.Zero, BigInteger.One, BigInteger.Zero]),
+      "closest one-coin BigInt amount must respect stock");
+
+var oneCoinUnreachable = EnhancedChangeEngine.Compute(
+    700_001, [new BigInteger(800_000), new BigInteger(900_000)],
+    maxCoins: 1, nearest: true);
+Check(oneCoinUnreachable is null, "closest one-coin cannot exceed amount");
+
+var oneCoinImpossibleStock = EnhancedChangeEngine.Compute(
+    BigInteger.Parse("9999999999999999999999999"),
+    [new BigInteger(500_000), new BigInteger(300_000)],
+    [BigInteger.Zero, BigInteger.Zero], maxCoins: 1, nearest: true);
+Check(oneCoinImpossibleStock is null, "empty stock must not generate change");
+
