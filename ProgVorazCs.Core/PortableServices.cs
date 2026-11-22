@@ -176,6 +176,16 @@ public sealed class PortableServices
             string name = MapCurrency(fields.ElementAtOrDefault(1) ?? "");
             string amountText = fields.ElementAtOrDefault(2) ?? "0";
             string rangeText = fields.ElementAtOrDefault(3) ?? "";
+            if (mode.Length == 0) mode = "a";
+            if (!mode.Equals("a", StringComparison.OrdinalIgnoreCase) &&
+                !mode.Equals("b", StringComparison.OrdinalIgnoreCase) &&
+                !mode.Equals("c", StringComparison.OrdinalIgnoreCase))
+            {
+                WriteRow(output, "", "", amountText, "ERROR",
+                    english ? "invalid mode" : "modo invalido");
+                log?.WriteLine("invalid mode: " + mode);
+                continue;
+            }
             if (!BigInteger.TryParse(amountText, NumberStyles.None, CultureInfo.InvariantCulture, out var amount))
             {
                 WriteRow(output, "", "", amountText, "ERROR", english ? "invalid amount" : "monto invalido");
