@@ -191,6 +191,31 @@ var nearLarge = EnhancedChangeEngine.Compute(150_001,
 Check(nearLarge?.Covered == 150_000 && nearLarge.TotalCoins == 3,
     "cercano alto calculado con una tabla DP");
 
+// Regression: the >200000 BigInteger route must search for the nearest
+// representable partial amount, honoring limits, inventories and huge counts.
+var singleNear = EnhancedChangeEngine.Compute(200_001, [new BigInteger(50_000)], nearest: true);
+Check(singleNear?.Covered == 200_000 && singleNear.TotalCoins == 4,
+    "single-coin BigInteger nearest above DP limit");
+var singleNearLimit = EnhancedChangeEngine.Compute(200_001, [new BigInteger(50_000)],
+    minCoins: 1, maxCoins: 1, nearest: true);
+Check(singleNearLimit?.Covered == 50_000 && singleNearLimit.TotalCoins == 1,
+    "single-coin nearest respects maximum");
+var singleNearStock = EnhancedChangeEngine.Compute(200_001, [new BigInteger(50_000)],
+    [new BigInteger(2)], nearest: true);
+Check(singleNearStock?.Covered == 100_000 && singleNearStock.TotalCoins == 2,
+    "single-coin nearest respects stock");
+Check(EnhancedChangeEngine.Compute(200_001, [new BigInteger(50_000)],
+    [new BigInteger(2)], minCoins: 3, nearest: true) is null,
+    "single-coin minimum is impossible with stock");
+Check(EnhancedChangeEngine.Compute(200_001, [new BigInteger(50_000)]) is null,
+    "single-coin exact change rejects non-multiple");
+var astronomicalNear = EnhancedChangeEngine.Compute(BigInteger.Pow(10, 40) + 1,
+    [BigInteger.One], nearest: true);
+Check(astronomicalNear?.Covered == BigInteger.Pow(10, 40) + 1 &&
+    astronomicalNear.TotalCoins == BigInteger.Pow(10, 40) + 1,
+    "single-coin nearest supports counts beyond size_t");
+
+
 
 string temp = Path.Combine(Path.GetTempPath(), "progvoraz-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(temp);
