@@ -103,7 +103,7 @@ public static class EnhancedChangeEngine
                 Answer? small = ExactUpToFourCoins(
                     amount, denominations, stock, minCoins, maxCoins);
                 if (small is not null) return small;
-                Answer? longer = ExactFiveToTwelveCoins(
+                Answer? longer = ExactFiveToTwentyCoins(
                     amount, denominations, stock, minCoins, maxCoins);
                 if (longer is not null) return longer;
             }
@@ -558,18 +558,23 @@ public static class EnhancedChangeEngine
 
     /// <summary>
     /// Exhaustive, amount-independent search for an admissible solution of
-    /// 5–8 coins for at most eight denominations, and 9–12 coins
-    /// when there are at most five denomination entries.
+    /// 5–8 coins for at most eight denominations, 9–12 for at most five,
+    /// and 13–20 for at most four. The search space is bounded.
     /// A witness is optimal because 1-4 pieces were already exhausted and
     /// the remaining depths are examined in ascending order. Failure to find
     /// one is inconclusive, not proof of impossibility.
     /// </summary>
-    private static Answer? ExactFiveToTwelveCoins(BigInteger amount,
+    private static Answer? ExactFiveToTwentyCoins(BigInteger amount,
         IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger>? stock,
         int minCoins, int? maxCoins)
     {
         int n = denominations.Count;
-        if (n == 0 || n > 8 || minCoins > (n <= 5 ? 12 : 8) || maxCoins is < 5)
+        if (n == 0 || n > 8 || minCoins > (n <= 4 ? 20 : n <= 5 ? 12 : 8) || maxCoins is < 5)
+            return null;
+        int maxDepth = Math.Min(n <= 4 ? 20 : n <= 5 ? 12 : 8, maxCoins ?? 20);
+        // Mathematical upper bound on any payable sum with this many pieces.
+        // Prevent costly recursion for astronomically large BigInteger amounts.
+        if (amount > denominations.Max() * maxDepth)
             return null;
         var counts = new BigInteger[n];
 
@@ -591,7 +596,7 @@ public static class EnhancedChangeEngine
         }
 
         for (int depth = Math.Max(5, minCoins);
-             depth <= Math.Min(n <= 5 ? 12 : 8, maxCoins ?? 12); depth++)
+             depth <= Math.Min(n <= 4 ? 20 : n <= 5 ? 12 : 8, maxCoins ?? 20); depth++)
             if (Visit(amount, 0, depth))
                 return new Answer(amount, (BigInteger[])counts.Clone());
         return null;
