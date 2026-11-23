@@ -49,6 +49,46 @@ public static class EnhancedChangeEngine
             return new Answer(denominations[bestIndex], counts);
         }
 
+        // With at most two coins, exhaustive O(n^2) enumeration is exact even
+        // for astronomical amounts. The large-amount greedy fallback cannot
+        // answer nearest-change queries (for example 800000+400000 <= 1200001).
+        if (nearest && maxCoins == 2 && denominations.Count <= 256)
+        {
+            BigInteger best = BigInteger.Zero;
+            int bestFirst = -1, bestSecond = -1;
+            if (minCoins <= 1)
+                for (int i = 0; i < denominations.Count; i++)
+                    if (denominations[i] <= amount &&
+                        (stock is null || stock[i] >= 1) &&
+                        denominations[i] > best)
+                    {
+                        best = denominations[i];
+                        bestFirst = i;
+                        bestSecond = -1;
+                    }
+
+            for (int i = 0; i < denominations.Count; i++)
+                for (int j = i; j < denominations.Count; j++)
+                {
+                    if (stock is not null &&
+                        (stock[i] < (i == j ? 2 : 1) || stock[j] < 1))
+                        continue;
+                    BigInteger sum = denominations[i] + denominations[j];
+                    if (sum <= amount && sum > best)
+                    {
+                        best = sum;
+                        bestFirst = i;
+                        bestSecond = j;
+                    }
+                }
+
+            if (bestFirst < 0) return null;
+            BigInteger[] nearestCounts = new BigInteger[denominations.Count];
+            nearestCounts[bestFirst]++;
+            if (bestSecond >= 0) nearestCounts[bestSecond]++;
+            return new Answer(best, nearestCounts);
+        }
+
         // A single denomination has a closed-form optimum even for amounts
         // larger than Int32/UInt64. The closest-change path must enforce both
         // stock and coin-count bounds instead of falling back to exact change.
