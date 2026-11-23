@@ -122,6 +122,14 @@ public static class EnhancedChangeEngine
                 : new Answer(normalized.Covered * unit, normalized.Counts);
         }
 
+        // The ordinary ranged DP cannot retain all non-minimal coin counts
+        // at the 200,000 threshold. The two-denomination unlimited closest
+        // solver is exact throughout that boundary, not just above it.
+        if (nearest && stock is null && maxCoins is null && minCoins > 0 &&
+            denominations.Count == 2 && denominations[0] != denominations[1] &&
+            denominations.Max() <= 50_000)
+            return NearestTwoDenominationsUnlimited(amount, denominations, minCoins);
+
         // The ordinary amount-only DP retains just the shortest answer;
         // a positive lower bound can require a longer valid composition.
         // Use the exact Diophantine solver for two distinct denominations.
