@@ -156,13 +156,20 @@ public static class EnhancedChangeEngine
 
             if (denominations.Count == 2 && denominations[0] != denominations[1])
             {
-                if (nearest && minCoins == 0 && maxCoins is null)
+                if (nearest && maxCoins is null)
                 {
                     Answer? closest = stock is null
-                        ? NearestTwoDenominationsUnlimited(amount, denominations)
-                        : NearestTwoDenominationsWithStock(amount, denominations, stock);
+                        ? NearestTwoDenominationsUnlimited(amount, denominations, minCoins)
+                        : minCoins == 0
+                            ? NearestTwoDenominationsWithStock(amount, denominations, stock)
+                            : null;
                     if (closest is not null)
                         return closest;
+                    // For unlimited stock and supported small denominations,
+                    // absence of a candidate has already been proved. Otherwise
+                    // preserve the existing fallback for unsupported inputs.
+                    if (stock is null && denominations.Max() <= 50_000)
+                        return null;
                 }
                 return SolveTwoDenominations(amount, denominations, stock, minCoins, maxCoins);
             }
@@ -437,26 +444,33 @@ public static class EnhancedChangeEngine
 
     /// <summary>
     /// Exact nearest amount for two unlimited positive denominations <= 50,000
-    /// with no coin-count constraints. The largest denomination alone gives
-    /// the reachable lower bound floor(amount / largest) * largest. Every
-    /// reachable value is a multiple of gcd, so at most largest/gcd exact
-    /// Diophantine candidates need consideration, independently of BigInteger size.
+    /// with a minimum coin count and no maximum. Starting with minCoins
+    /// copies of the smaller denomination, then filling with the largest,
+    /// gives a feasible lower bound whenever any change is possible. It is
+    /// less than one largest denomination below the request. Every feasible
+    /// value is a multiple of gcd; at most largest/gcd exact candidates
+    /// therefore need consideration independently of BigInteger size.
     /// Other cases retain their existing solver or explicit limitations.
     /// </summary>
     private static Answer? NearestTwoDenominationsUnlimited(
-        BigInteger amount, IReadOnlyList<BigInteger> denominations)
+        BigInteger amount, IReadOnlyList<BigInteger> denominations, int minCoins)
     {
         BigInteger largest = BigInteger.Max(denominations[0], denominations[1]);
         if (largest > 50_000) return null;
+        BigInteger smallest = BigInteger.Min(denominations[0], denominations[1]);
+        BigInteger minimumCost = smallest * minCoins;
+        if (amount < minimumCost) return null;
+
         BigInteger gcd = BigInteger.GreatestCommonDivisor(
             denominations[0], denominations[1]);
         BigInteger candidate = amount - amount % gcd;
-        BigInteger guaranteed = amount / largest * largest;
+        BigInteger guaranteed = minimumCost +
+            (amount - minimumCost) / largest * largest;
 
         while (candidate >= guaranteed && candidate > 0)
         {
             Answer? exact = SolveTwoDenominations(
-                candidate, denominations, null, 0, null);
+                candidate, denominations, null, minCoins, null);
             if (exact is not null) return exact;
             candidate -= gcd;
         }
