@@ -564,7 +564,7 @@ public static class EnhancedChangeEngine
     /// the remaining depths are examined in ascending order. Failure to find
     /// one is inconclusive, not proof of impossibility.
     /// </summary>
-    private static Answer? ExactFiveToEightCoins(BigInteger amount,
+    private static Answer? ExactFiveToTwelveCoins(BigInteger amount,
         IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger>? stock,
         int minCoins, int? maxCoins)
     {
