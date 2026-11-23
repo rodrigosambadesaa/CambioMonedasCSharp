@@ -629,6 +629,32 @@ var fiveCoinLimited = EnhancedChangeEngine.Compute(
 Check(fiveCoinLimited is not null && fiveCoinLimited.TotalCoins == 5,
       "gcd-one five-piece optimum obeys maximum coin count");
 
+// Nearest large BigInteger: with two pieces the exact best fit can be
+// smaller than the requested amount, even when greedy exact change fails.
+var twoPieceTypes = new BigInteger[] { 800_000, 700_000, 400_000 };
+var twoPieceNearest = EnhancedChangeEngine.Compute(1_200_001, twoPieceTypes,
+    maxCoins: 2, nearest: true);
+Check(twoPieceNearest is not null && twoPieceNearest.Covered == 1_200_000 &&
+      twoPieceNearest.Counts.SequenceEqual(new BigInteger[] { 1, 0, 1 }),
+      "large nearest two-piece sum must not require exact change");
+var twoPieceStock = EnhancedChangeEngine.Compute(1_200_001, twoPieceTypes,
+    new BigInteger[] { 0, 1, 2 }, maxCoins: 2, nearest: true);
+Check(twoPieceStock is not null && twoPieceStock.Covered == 1_100_000 &&
+      twoPieceStock.Counts.SequenceEqual(new BigInteger[] { 0, 1, 1 }),
+      "large nearest two-piece sum must respect finite stock");
+var twoPieceNoDouble = EnhancedChangeEngine.Compute(700_001,
+    new BigInteger[] { 600_000, 350_000, 200_000 },
+    new BigInteger[] { 0, 1, 1 }, maxCoins: 2, nearest: true);
+Check(twoPieceNoDouble is not null && twoPieceNoDouble.Covered == 550_000 &&
+      twoPieceNoDouble.Counts.SequenceEqual(new BigInteger[] { 0, 1, 1 }),
+      "single coin in inventory cannot be consumed twice");
+var twoPieceMin = EnhancedChangeEngine.Compute(800_001,
+    new BigInteger[] { 800_000, 400_000, 200_000 },
+    minCoins: 2, maxCoins: 2, nearest: true);
+Check(twoPieceMin is not null && twoPieceMin.Covered == 800_000 &&
+      twoPieceMin.Counts.SequenceEqual(new BigInteger[] { 0, 2, 0 }),
+      "large nearest lower coin bound must reject single-coin solution");
+
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
 
 // GCD normalization must preserve optimality, inventory and nearest change
