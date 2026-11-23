@@ -554,6 +554,25 @@ Check(fourCoinsWitness is not null && fourCoinsWitness.TotalCoins == 4 &&
       fourCoinsWitness.Counts[1] == 4,
       "four-piece optimality proven for huge noncanonical amount");
 
+// GCD=1 and all useful denominations exceed the residue/Dynamic DP cap.
+// Four coins cannot pay 3,500,000 (4 * 800,001 < 3,500,000);
+// five 700,000-unit coins therefore certify the global optimum.
+var fiveCoinGcdOne = EnhancedChangeEngine.Compute(
+    3_500_000, noncanonicalGcdOne);
+Check(fiveCoinGcdOne is not null && fiveCoinGcdOne.TotalCoins == 5 &&
+      fiveCoinGcdOne.Counts.SequenceEqual(new BigInteger[] { 0, 5, 0, 0 }),
+      "gcd-one large amount needs five coins, not greedy fallback");
+var fiveCoinStock = EnhancedChangeEngine.Compute(
+    3_500_000, noncanonicalGcdOne,
+    new BigInteger[] { 100, 5, 100, 1000000 });
+Check(fiveCoinStock is not null && fiveCoinStock.TotalCoins == 5 &&
+      fiveCoinStock.Counts.SequenceEqual(new BigInteger[] { 0, 5, 0, 0 }),
+      "gcd-one five-piece optimum respects finite inventory");
+var fiveCoinLimited = EnhancedChangeEngine.Compute(
+    3_500_000, noncanonicalGcdOne, maxCoins: 5);
+Check(fiveCoinLimited is not null && fiveCoinLimited.TotalCoins == 5,
+      "gcd-one five-piece optimum obeys maximum coin count");
+
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
 
 // GCD normalization must preserve optimality, inventory and nearest change
