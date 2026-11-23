@@ -103,6 +103,9 @@ public static class EnhancedChangeEngine
                 Answer? small = ExactUpToFourCoins(
                     amount, denominations, stock, minCoins, maxCoins);
                 if (small is not null) return small;
+                Answer? longer = ExactFiveToEightCoins(
+                    amount, denominations, stock, minCoins, maxCoins);
+                if (longer is not null) return longer;
             }
 
             // Exact sparse knapsack for finite inventories, independent
@@ -550,6 +553,46 @@ public static class EnhancedChangeEngine
                         if (Available(a, b, c, d))
                             return Result(a, b, c, d);
             }
+        return null;
+    }
+
+    /// <summary>
+    /// Exhaustive, amount-independent search for an admissible solution of
+    /// 5 to 8 coins, for at most 8 distinct denomination entries.
+    /// A witness is optimal because 1-4 pieces were already exhausted and
+    /// the remaining depths are examined in ascending order. Failure to find
+    /// one is inconclusive, not proof of impossibility.
+    /// </summary>
+    private static Answer? ExactFiveToEightCoins(BigInteger amount,
+        IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger>? stock,
+        int minCoins, int? maxCoins)
+    {
+        int n = denominations.Count;
+        if (n == 0 || n > 8 || minCoins > 8 || maxCoins is < 5)
+            return null;
+        var counts = new BigInteger[n];
+
+        bool Visit(BigInteger remaining, int first, int left)
+        {
+            if (left == 0) return remaining.IsZero;
+            if (remaining.IsZero) return false;
+            for (int i = first; i < n; i++)
+            {
+                if (denominations[i] > remaining ||
+                    stock is not null && counts[i] >= stock[i])
+                    continue;
+                counts[i]++;
+                if (Visit(remaining - denominations[i], i, left - 1))
+                    return true;
+                counts[i]--;
+            }
+            return false;
+        }
+
+        for (int depth = Math.Max(5, minCoins);
+             depth <= Math.Min(8, maxCoins ?? 8); depth++)
+            if (Visit(amount, 0, depth))
+                return new Answer(amount, (BigInteger[])counts.Clone());
         return null;
     }
 
