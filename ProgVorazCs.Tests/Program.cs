@@ -557,6 +557,32 @@ Check(fourCoinsWitness is not null && fourCoinsWitness.TotalCoins == 4 &&
 // GCD=1 and all useful denominations exceed the residue/Dynamic DP cap.
 // Four coins cannot pay 3,500,000 (4 * 800,001 < 3,500,000);
 // five 700,000-unit coins therefore certify the global optimum.
+// For <=12 pieces, any non-700000 coin contributes residue one mod
+// 100000. A target divisible by 100000 therefore requires exclusively
+// 700000-unit pieces, certifying the minimum of 9 or 12.
+var nineCoinGcdOne = EnhancedChangeEngine.Compute(6_300_000, noncanonicalGcdOne);
+Check(nineCoinGcdOne is not null && nineCoinGcdOne.TotalCoins == 9 &&
+      nineCoinGcdOne.Counts.SequenceEqual(new BigInteger[] { 0, 9, 0, 0 }),
+      "gcd-one nine-piece optimum");
+var nineCoinStock = EnhancedChangeEngine.Compute(6_300_000,
+    noncanonicalGcdOne, new BigInteger[] { 100, 12, 100, 100000 });
+Check(nineCoinStock is not null && nineCoinStock.TotalCoins == 9 &&
+      nineCoinStock.Counts.SequenceEqual(new BigInteger[] { 0, 9, 0, 0 }),
+      "gcd-one nine-piece finite stock optimum");
+var nineCoinBounded = EnhancedChangeEngine.Compute(6_300_000,
+    noncanonicalGcdOne, minCoins: 9, maxCoins: 9);
+Check(nineCoinBounded is not null && nineCoinBounded.TotalCoins == 9,
+      "gcd-one exactly nine pieces");
+var twelveCoinGcdOne = EnhancedChangeEngine.Compute(8_400_000, noncanonicalGcdOne);
+Check(twelveCoinGcdOne is not null && twelveCoinGcdOne.TotalCoins == 12 &&
+      twelveCoinGcdOne.Counts.SequenceEqual(new BigInteger[] { 0, 12, 0, 0 }),
+      "gcd-one twelve-piece optimum");
+var twelveCoinStock = EnhancedChangeEngine.Compute(8_400_000,
+    noncanonicalGcdOne, new BigInteger[] { 100, 12, 100, 100000 });
+Check(twelveCoinStock is not null && twelveCoinStock.TotalCoins == 12 &&
+      twelveCoinStock.Counts.SequenceEqual(new BigInteger[] { 0, 12, 0, 0 }),
+      "gcd-one twelve-piece finite stock optimum");
+
 var fiveCoinGcdOne = EnhancedChangeEngine.Compute(
     3_500_000, noncanonicalGcdOne);
 Check(fiveCoinGcdOne is not null && fiveCoinGcdOne.TotalCoins == 5 &&
