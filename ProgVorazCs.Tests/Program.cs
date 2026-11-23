@@ -655,6 +655,25 @@ Check(twoPieceMin is not null && twoPieceMin.Covered == 800_000 &&
       twoPieceMin.Counts.SequenceEqual(new BigInteger[] { 0, 2, 0 }),
       "large nearest lower coin bound must reject single-coin solution");
 
+// The nearest large-amount route must not require an exact requested amount
+// when a *minimum* number of pieces is specified (and no maximum is set).
+var minimumTwoTypes = new BigInteger[] { 50_000, 49_999 };
+var minimumNearest = EnhancedChangeEngine.Compute(250_001, minimumTwoTypes,
+    minCoins: 5, nearest: true);
+Check(minimumNearest is not null && minimumNearest.Covered == 250_000 &&
+      minimumNearest.TotalCoins == 5 &&
+      minimumNearest.Counts.SequenceEqual(new BigInteger[] { 5, 0 }),
+      "BigInteger nearest two types with minimum five pieces");
+var minimumUnreachable = EnhancedChangeEngine.Compute(200_000, minimumTwoTypes,
+    minCoins: 5, nearest: true);
+Check(minimumUnreachable is null,
+      "nearest two types reject insufficient amount for minimum five pieces");
+var minimumStillExact = EnhancedChangeEngine.Compute(250_000, minimumTwoTypes,
+    minCoins: 5, nearest: true);
+Check(minimumStillExact is not null && minimumStillExact.Covered == 250_000 &&
+      minimumStillExact.TotalCoins == 5,
+      "nearest minimum must preserve exact answers");
+
 Console.WriteLine("OK: motor, rango, inventario, BigInteger, cercano, batch, JSON, reporte, snapshot.");
 
 // GCD normalization must preserve optimality, inventory and nearest change
