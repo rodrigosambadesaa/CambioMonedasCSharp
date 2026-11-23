@@ -573,6 +573,36 @@ var nineCoinBounded = EnhancedChangeEngine.Compute(6_300_000,
     noncanonicalGcdOne, minCoins: 9, maxCoins: 9);
 Check(nineCoinBounded is not null && nineCoinBounded.TotalCoins == 9,
       "gcd-one exactly nine pieces");
+// Under 21 pieces, the non-700000 denominations contribute 1 mod 100000.
+// The only possible solution for these multiples of 100000 therefore
+// consists exclusively of 700000-unit pieces.
+var thirteenCoinGcdOne = EnhancedChangeEngine.Compute(9_100_000, noncanonicalGcdOne);
+Check(thirteenCoinGcdOne is not null && thirteenCoinGcdOne.TotalCoins == 13 &&
+      thirteenCoinGcdOne.Counts.SequenceEqual(new BigInteger[] { 0, 13, 0, 0 }),
+      "gcd-one thirteen-piece optimality");
+var thirteenCoinStock = EnhancedChangeEngine.Compute(9_100_000,
+    noncanonicalGcdOne, new BigInteger[] { 100, 20, 100, 100000 });
+Check(thirteenCoinStock is not null && thirteenCoinStock.TotalCoins == 13 &&
+      thirteenCoinStock.Counts.SequenceEqual(new BigInteger[] { 0, 13, 0, 0 }),
+      "gcd-one thirteen-piece finite stock");
+var thirteenCoinExactRange = EnhancedChangeEngine.Compute(9_100_000,
+    noncanonicalGcdOne, minCoins: 13, maxCoins: 13);
+Check(thirteenCoinExactRange is not null && thirteenCoinExactRange.TotalCoins == 13,
+      "gcd-one thirteen-piece exact range");
+var twentyCoinGcdOne = EnhancedChangeEngine.Compute(14_000_000, noncanonicalGcdOne);
+Check(twentyCoinGcdOne is not null && twentyCoinGcdOne.TotalCoins == 20 &&
+      twentyCoinGcdOne.Counts.SequenceEqual(new BigInteger[] { 0, 20, 0, 0 }),
+      "gcd-one twenty-piece optimality");
+var twentyCoinStock = EnhancedChangeEngine.Compute(14_000_000,
+    noncanonicalGcdOne, new BigInteger[] { 100, 20, 100, 100000 });
+Check(twentyCoinStock is not null && twentyCoinStock.TotalCoins == 20 &&
+      twentyCoinStock.Counts.SequenceEqual(new BigInteger[] { 0, 20, 0, 0 }),
+      "gcd-one twenty-piece finite stock");
+var twentyCoinExactRange = EnhancedChangeEngine.Compute(14_000_000,
+    noncanonicalGcdOne, minCoins: 20, maxCoins: 20);
+Check(twentyCoinExactRange is not null && twentyCoinExactRange.TotalCoins == 20,
+      "gcd-one twenty-piece exact range");
+
 var twelveCoinGcdOne = EnhancedChangeEngine.Compute(8_400_000, noncanonicalGcdOne);
 Check(twelveCoinGcdOne is not null && twelveCoinGcdOne.TotalCoins == 12 &&
       twelveCoinGcdOne.Counts.SequenceEqual(new BigInteger[] { 0, 12, 0, 0 }),
