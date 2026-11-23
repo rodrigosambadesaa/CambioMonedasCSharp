@@ -571,6 +571,11 @@ public static class EnhancedChangeEngine
         int n = denominations.Count;
         if (n == 0 || n > 8 || minCoins > (n <= 4 ? 20 : n <= 5 ? 12 : 8) || maxCoins is < 5)
             return null;
+        int maxDepth = Math.Min(n <= 4 ? 20 : n <= 5 ? 12 : 8, maxCoins ?? 20);
+        // Mathematical upper bound on any payable sum with this many pieces.
+        // Prevent costly recursion for astronomically large BigInteger amounts.
+        if (amount > denominations.Max() * maxDepth)
+            return null;
         var counts = new BigInteger[n];
 
         bool Visit(BigInteger remaining, int first, int left)
