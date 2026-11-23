@@ -103,7 +103,7 @@ public static class EnhancedChangeEngine
                 Answer? small = ExactUpToFourCoins(
                     amount, denominations, stock, minCoins, maxCoins);
                 if (small is not null) return small;
-                Answer? longer = ExactFiveToEightCoins(
+                Answer? longer = ExactFiveToTwelveCoins(
                     amount, denominations, stock, minCoins, maxCoins);
                 if (longer is not null) return longer;
             }
@@ -558,17 +558,18 @@ public static class EnhancedChangeEngine
 
     /// <summary>
     /// Exhaustive, amount-independent search for an admissible solution of
-    /// 5 to 8 coins, for at most 8 distinct denomination entries.
+    /// 5–8 coins for at most eight denominations, and 9–12 coins
+    /// when there are at most five denomination entries.
     /// A witness is optimal because 1-4 pieces were already exhausted and
     /// the remaining depths are examined in ascending order. Failure to find
     /// one is inconclusive, not proof of impossibility.
     /// </summary>
-    private static Answer? ExactFiveToEightCoins(BigInteger amount,
+    private static Answer? ExactFiveToTwelveCoins(BigInteger amount,
         IReadOnlyList<BigInteger> denominations, IReadOnlyList<BigInteger>? stock,
         int minCoins, int? maxCoins)
     {
         int n = denominations.Count;
-        if (n == 0 || n > 8 || minCoins > 8 || maxCoins is < 5)
+        if (n == 0 || n > 8 || minCoins > (n <= 5 ? 12 : 8) || maxCoins is < 5)
             return null;
         var counts = new BigInteger[n];
 
@@ -590,7 +591,7 @@ public static class EnhancedChangeEngine
         }
 
         for (int depth = Math.Max(5, minCoins);
-             depth <= Math.Min(8, maxCoins ?? 8); depth++)
+             depth <= Math.Min(n <= 5 ? 12 : 8, maxCoins ?? 12); depth++)
             if (Visit(amount, 0, depth))
                 return new Answer(amount, (BigInteger[])counts.Clone());
         return null;
